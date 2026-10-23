@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<h1>Contatos sem cliente</h1>
+<p class="sub">Mensagens que chegaram de números, grupos ou canais ainda não ligados a nenhum cliente. Ao vincular, todo o histórico passa para o cliente.</p>
+<div class="rolagem"><table>
+  <tr><th>Canal</th><th>Origem</th><th>Nome</th><th class="num">Mensagens</th><th>Última</th><th>Vincular a</th></tr>
+  {% for canal, origem, n, ultima, autor in linhas %}
+  <tr>
+    <td>{{ canal }}</td><td><code>{{ origem }}</code></td><td>{{ autor or "" }}</td>
+    <td class="num">{{ n }}</td><td>{{ ultima.strftime("%d/%m %H:%M") }}</td>
+    <td>
+      <form method="post" action="/pendentes/vincular" style="display:flex;gap:6px">
+        <input type="hidden" name="canal" value="{{ canal }}"><input type="hidden" name="origem" value="{{ origem }}">
+        <select name="cliente_id" required><option value="">Escolha…</option>{% for c in clientes %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select>
+        <button class="btn">Vincular</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="vazio">Tudo vinculado.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

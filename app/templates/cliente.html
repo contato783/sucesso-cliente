@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block titulo %}{{ c.nome }} · Sucesso do Cliente{% endblock %}
+{% block conteudo %}
+<div class="linha">
+  <div>
+    <h1>{{ c.nome }} <span class="selo {{ h.faixa }}">{{ h.score|round|int }} · {{ FAIXAS[h.faixa] }}</span></h1>
+    <p class="sub">
+      {% set partes = [c.empresa, c.programa, "CS: " ~ c.responsavel_cs if c.responsavel_cs,
+                       c.valor_mensal|brl ~ "/mês" if c.valor_mensal,
+                       "renova em " ~ c.data_renovacao.strftime("%d/%m/%Y") if c.data_renovacao,
+                       c.status if c.status != "ativo"] %}
+      {{ partes|select|join(" · ") }}
+    </p>
+  </div>
+  <a class="btn sec" href="/clientes/{{ c.id }}/editar">Editar</a>
+</div>
+
+<div class="grade">
+  {% for nome, v in [("Engajamento", h.engajamento), ("Sentimento", h.sentimento), ("Financeiro", h.financeiro), ("Resultado", h.resultado)] %}
+  <div class="card kpi">
+    <div class="rotulo">{{ nome }}</div>
+    <div class="valor">{{ v|round|int if v is not none else "—" }}</div>
+    {% if v is not none %}<div class="barra"><span style="width:{{ v }}%"></span></div>{% else %}<div class="sub" style="font-size:12px;margin:0">sem dados</div>{% endif %}
+  </div>
+  {% endfor %}
+  <div class="card kpi">
+    <div class="rotulo">Tempo mediano de resposta (90 dias)</div>
+    <div class="valor">{% if atend.tempo_resposta_mediano_min is none %}—{% elif atend.tempo_resposta_mediano_min < 60 %}{{ atend.tempo_resposta_mediano_min|round|int }} min{% else %}{{ (atend.tempo_resposta_mediano_min / 60)|round(1) }} h{% endif %}</div>
+  </div>
+</div>
+
+{% if h.alertas %}
+<h2>Alertas</h2>
+<div class="card"><ul class="alertas" style="font-size:14px;color:var(--texto)">{% for a in h.alertas %}<li>{{ a }}</li>{% endfor %}</ul></div>
+{% endif %}
+
+{% if historico|length > 1 %}
+<h2>Evolução do score</h2>
+<div class="card">
+  {% set w = 600 %}{% set hgt = 120 %}{% set n = historico|length %}
+  <svg viewBox="0 0 {{ w }} {{ hgt }}" width="100%" height="{{ hgt }}" preserveAspectRatio="none" role="img" aria-label="Evolução do health score">
+    <line x1="0" x2="{{ w }}" y1="{{ hgt - 70 * hgt / 100 }}" y2="{{ hgt - 70 * hgt / 100 }}" stroke="var(--ok)" stroke-dasharray="4 4" stroke-width="1"/>
+    <line x1="0" x2="{{ w }}" y1="{{ hgt - 40 * hgt / 100 }}" y2="{{ hgt - 40 * hgt / 100 }}" stroke="var(--risco)" stroke-dasharray="4 4" stroke-width="1"/>
+    <polyline fill="none" stroke="var(--marca)" stroke-width="2" vector-effect="non-scaling-stroke"
+      points="{% for s in historico %}{{ loop.index0 * w / (n - 1) }},{{ hgt - s.score * hgt / 100 }} {% endfor %}"/>
+  </svg>
+  <div class="linha sub" style="font-size:12px;margin:0"><span>{{ historico[0].data.strftime("%d/%m") }}</span><span>{{ historico[-1].data.strftime("%d/%m") }}</span></div>
+</div>
+{% endif %}
+
+<h2>Registrar consultoria</h2>
+<div class="card">
+<form class="campos" method="post" action="/clientes/{{ c.id }}/consultorias">
+  <label>Data e hora <input type="datetime-local" name="data" required></label>
+  <label>Consultor(a) <input name="consultor"></label>
+  <label>Duração (min) <input type="number" name="duracao_min" min="0"></label>
+  <label>Cliente compareceu? <select name="compareceu"><option value="sim">Sim</option><option value="nao">Não</option></select></label>
+  <label>Tarefas combinadas na anterior <input type="number" name="tarefas_combinadas" value="0" min="0"></label>
+  <label>Tarefas cumpridas <input type="number" name="tarefas_cumpridas" value="0" min="0"></label>
+  <label>Nota do cliente (0–10) <input type="number" name="nota_cliente" min="0" max="10"></label>
+  <label class="inteiro">Notas da consultoria (entram na análise de sentimento) <textarea name="notas"></textarea></label>
+  <div><button class="btn">Salvar consultoria</button></div>
+</form>
+</div>
+
+<h2>Consultorias</h2>
+<div class="rolagem"><table>
+  <tr><th>Data</th><th>Consultor</th><th>Presença</th><th class="num">Tarefas</th><th class="num">Nota</th><th>Notas</th></tr>
+  {% for k in consultorias %}
+  <tr>
+    <td>{{ k.data.strftime("%d/%m/%Y") }}</td><td>{{ k.consultor or "" }}</td>
+    <td>{% if k.compareceu %}<span class="selo saudavel">Presente</span>{% else %}<span class="selo risco">Faltou</span>{% endif %}</td>
+    <td class="num">{{ k.tarefas_cumpridas }}/{{ k.tarefas_combinadas }}</td>
+    <td class="num">{{ k.nota_cliente if k.nota_cliente is not none else "—" }}</td>
+    <td class="msg">{{ (k.notas or "")[:200] }}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="vazio">Nenhuma consultoria registrada.</td></tr>{% endfor %}
+</table></div>
+
+<h2>Financeiro (Sponte)</h2>
+<div class="rolagem"><table>
+  <tr><th>Vencimento</th><th class="num">Valor</th><th>Situação</th></tr>
+  {% for p in parcelas %}
+  <tr>
+    <td>{{ p.vencimento.strftime("%d/%m/%Y") }}</td><td class="num">{{ p.valor|brl }}</td>
+    <td>{% if p.pago %}<span class="selo saudavel">Paga {{ p.data_pagamento.strftime("%d/%m") if p.data_pagamento else "" }}</span>
+        {% elif p.vencimento < hoje %}<span class="selo risco">Vencida há {{ (hoje - p.vencimento).days }} dias</span>
+        {% else %}<span class="selo atencao">A vencer</span>{% endif %}</td>
+  </tr>
+  {% else %}<tr><td colspan="3" class="vazio">Sem parcelas. Preencha o código Sponte do cliente e sincronize.</td></tr>{% endfor %}
+</table></div>
+
+<h2>Linha do tempo</h2>
+<div class="rolagem"><table>
+  <tr><th>Quando</th><th>Canal</th><th>Quem</th><th>Mensagem</th><th>Análise</th></tr>
+  {% for i in interacoes %}
+  <tr>
+    <td style="white-space:nowrap">{{ i.ocorrido_em.strftime("%d/%m %H:%M") }}</td>
+    <td>{{ i.canal }}</td>
+    <td>{{ "Equipe" if i.direcao == "saida" else (i.autor or "Cliente") }}</td>
+    <td class="msg">{{ i.texto[:300] }}</td>
+    <td style="white-space:nowrap">
+      {% if i.sentimento is not none %}
+        <span class="selo {{ 'saudavel' if i.sentimento > 0.2 else ('risco' if i.sentimento < -0.2 else 'atencao') }}">{{ "%+.1f"|format(i.sentimento) }}</span>
+        <span class="meta">{{ i.categoria }}</span>{% if i.sinal_risco %} <span class="selo risco">churn</span>{% endif %}
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="vazio">Nenhuma interação ainda.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}
