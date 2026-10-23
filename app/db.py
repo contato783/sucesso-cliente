@@ -10,7 +10,15 @@ class Base(DeclarativeBase):
     pass
 
 
-_url = get_settings().database_url
+def _ajustar_url(url: str) -> str:
+    """Render e Heroku entregam postgres:// ou postgresql://; o SQLAlchemy precisa saber o driver (psycopg 3)."""
+    for prefixo in ("postgres://", "postgresql://"):
+        if url.startswith(prefixo):
+            return "postgresql+psycopg://" + url[len(prefixo):]
+    return url
+
+
+_url = _ajustar_url(get_settings().database_url)
 engine = create_engine(
     _url, connect_args={"check_same_thread": False} if _url.startswith("sqlite") else {}
 )

@@ -2,6 +2,21 @@
 
 Painel de saúde da base e de atendimento, alimentado por WhatsApp, Slack, Sponte e pelos registros de consultoria.
 
+## Colocar no ar (sem programar)
+
+O jeito mais simples é o [Render](https://render.com), que publica direto deste repositório do GitHub e já cria o banco de dados.
+
+1. Crie uma conta em render.com entrando com o GitHub.
+2. No painel do Render, clique em **New +** → **Blueprint** e escolha o repositório `sucesso-cliente`. O Render lê o arquivo `render.yaml` e monta tudo sozinho: o sistema, o banco Postgres e a sincronização automática de hora em hora.
+3. Ele vai pedir algumas chaves. Pode deixar todas em branco por enquanto e preencher depois. Recomendo já colar a `ANTHROPIC_API_KEY` (crie em console.anthropic.com).
+4. Confirme. Em alguns minutos o sistema fica no ar num endereço como `https://sucesso-cliente.onrender.com`.
+5. Para entrar: no Render, abra o serviço → **Environment** e copie o valor de `PAINEL_TOKEN`. No navegador, use qualquer nome de usuário e esse valor como senha.
+6. Dentro do sistema, siga o "Comece por aqui": importe a planilha de clientes e abra **Configurações**, que mostra os endereços prontos para colar no WhatsApp e no Slack.
+
+**Custos:** o `render.yaml` usa os planos pagos mais baratos do Render, para o sistema e para o banco. O plano gratuito "dorme" depois de alguns minutos sem uso (as mensagens do WhatsApp chegariam atrasadas) e o banco gratuito expira. Confira os preços atuais na página do Render antes de confirmar. A análise de sentimento é cobrada à parte pela Anthropic, conforme o volume de mensagens.
+
+Toda alteração enviada ao GitHub é publicada sozinha no Render.
+
 ## O que o sistema faz
 
 - **Recebe as conversas** do WhatsApp e do Slack em tempo real (webhooks) e liga cada mensagem ao cliente pelo telefone, grupo ou canal.
@@ -10,6 +25,8 @@ Painel de saúde da base e de atendimento, alimentado por WhatsApp, Slack, Spont
 - **Analisa o sentimento** de cada mensagem do cliente com o Claude: tom de -1 a +1, categoria (dúvida, reclamação, financeiro…) e sinal de risco de cancelamento.
 - **Calcula o health score** (0–100) de cada cliente e grava uma foto por dia, para acompanhar a evolução.
 - **Mede o atendimento**: volume por canal, tempo mediano de resposta, % respondidas em até 1h e conversas paradas há mais de 24h.
+- **Importa a carteira** a partir de uma planilha (CSV do Excel ou do Google Planilhas), sem duplicar quem já existe.
+- **Mostra o que falta configurar** na tela Configurações, com os endereços de webhook prontos para copiar.
 
 ## Telas
 
@@ -61,13 +78,13 @@ O painel pede senha quando `PAINEL_TOKEN` está preenchido. O usuário pode ser 
 
 ## Rotina automática
 
-Agende, por exemplo de hora em hora (cron, agendador do servidor):
+O próprio servidor sincroniza de hora em hora (`SYNC_AUTOMATICO_MINUTOS`, 0 desliga). Se preferir um agendador externo, desligue e agende:
 
 ```bash
 python -m app.cli sync
 ```
 
-Ele sincroniza o Sponte, puxa o que faltou do Slack, analisa o sentimento das mensagens novas e recalcula os scores. Também dá para rodar pelo botão **Sincronizar agora** no painel.
+A rotina sincroniza o Sponte, puxa o que faltou do Slack, analisa o sentimento das mensagens novas e recalcula os scores. Também dá para rodar pelo botão **Sincronizar dados** na tela Hoje.
 
 ## Conectando cada fonte
 

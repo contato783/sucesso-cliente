@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     meta_primeiro_valor_dias: int = 30  # Lei 7
     meta_toque_dias: int = 14  # Lei 2: contato proativo da equipe
 
+    # Sincronização automática dentro do próprio servidor (0 desliga)
+    sync_automatico_minutos: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

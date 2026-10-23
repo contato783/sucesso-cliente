@@ -5,6 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["PAINEL_TOKEN"] = ""
+os.environ["SYNC_AUTOMATICO_MINUTOS"] = "0"
 os.environ["SLACK_SIGNING_SECRET"] = ""
 os.environ["WHATSAPP_WEBHOOK_SECRET"] = ""
 os.environ["WHATSAPP_APP_SECRET"] = ""

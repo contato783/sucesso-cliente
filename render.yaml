@@ -1,0 +1,42 @@
+# Blueprint do Render: cria o sistema e o banco de dados a partir deste repositório.
+# No Render: New + → Blueprint → escolha este repositório.
+databases:
+  - name: sucesso-cliente-db
+    plan: basic-256mb
+    databaseName: sucesso_cliente
+
+services:
+  - type: web
+    name: sucesso-cliente
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    healthCheckPath: /saude
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.1"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sucesso-cliente-db
+          property: connectionString
+      # Senha do painel, gerada pelo Render. Veja em Environment → PAINEL_TOKEN.
+      - key: PAINEL_TOKEN
+        generateValue: true
+      - key: WHATSAPP_VERIFY_TOKEN
+        generateValue: true
+      - key: WHATSAPP_WEBHOOK_SECRET
+        generateValue: true
+      # Preenchidos por você no painel do Render (o Render pede na criação)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_SIGNING_SECRET
+        sync: false
+      - key: SPONTE_CODIGO_CLIENTE
+        sync: false
+      - key: SPONTE_TOKEN
+        sync: false

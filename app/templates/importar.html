@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<p class="peq" style="margin:0 0 8px"><a href="/carteira">← Carteira</a></p>
+<div class="cabecalho">
+  <div>
+    <h1>Importar clientes</h1>
+    <p class="sub">Suba a planilha da sua carteira de uma vez. Quem já existe é atualizado, não duplicado.</p>
+  </div>
+</div>
+
+{% if resultado %}
+<div class="card" style="margin-bottom:16px;border-color:{{ 'var(--ok)' if not resultado.erros else 'var(--at)' }}">
+  <h3>Importação concluída</h3>
+  <p style="margin:4px 0">{{ resultado.criados }} cliente(s) novo(s) · {{ resultado.atualizados }} atualizado(s)
+    {% if resultado.erros %} · <b style="color:var(--at)">{{ resultado.erros|length }} linha(s) com problema</b>{% endif %}</p>
+  {% if resultado.erros %}<ul class="alertas" style="color:var(--texto)">{% for e in resultado.erros %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+  <p style="margin:10px 0 0"><a class="btn" href="/carteira">Ver carteira</a></p>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+  <div class="card">
+    <h3>1. Baixe o modelo</h3>
+    <p class="peq">Abra no Excel ou no Google Planilhas e preencha uma linha por cliente. Só a coluna <b>Nome</b> é obrigatória.</p>
+    <a class="btn sec" href="/clientes/modelo.csv">⬇ Baixar modelo</a>
+    <p class="peq" style="margin-top:14px">Já tem uma planilha? Pode usar a sua, desde que os títulos das colunas sejam parecidos:
+      Nome, Empresa, Programa, Responsável CS, WhatsApp, Valor mensal, Início, Renovação, Fit (alto, médio ou baixo),
+      Vendedor, Resultado esperado, Código Sponte, Canal Slack.</p>
+  </div>
+  <div class="card">
+    <h3>2. Salve como CSV e envie</h3>
+    <p class="peq">No Excel: Arquivo → Salvar como → <b>CSV (separado por ponto e vírgula)</b>.
+      No Google Planilhas: Arquivo → Fazer download → <b>CSV</b>.</p>
+    <form method="post" enctype="multipart/form-data" style="display:grid;gap:12px">
+      <input type="file" name="arquivo" accept=".csv,text/csv" required>
+      <div><button class="btn">Importar</button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}

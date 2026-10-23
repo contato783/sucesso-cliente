@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="cabecalho">
+  <div>
+    <h1>Configurações</h1>
+    <p class="sub">O que já está conectado e o que falta. As chaves ficam nas variáveis de ambiente do servidor (no Render: Environment).</p>
+  </div>
+</div>
+
+{% set prontas = itens|selectattr("status", "equalto", "ok")|list|length %}
+<div class="card" style="margin-bottom:16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+  <div style="font-size:28px;font-weight:650">{{ prontas }} de {{ itens|length }}</div>
+  <div style="flex:1;min-width:200px">
+    <div class="barra" style="height:10px"><span class="b-ok" style="width:{{ 100 * prontas / itens|length }}%"></span></div>
+    <div class="peq" style="margin-top:4px">itens prontos</div>
+  </div>
+</div>
+
+{% for i in itens %}
+<div class="card" style="margin-bottom:12px">
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+    <h3 style="margin:0">{{ i.nome }}</h3>
+    <span class="selo {{ i.status }}"><span class="ponto"></span>{{ {"ok": "Pronto", "atencao": "Configurado, aguardando dados", "pendente": "Pendente"}[i.status] }}</span>
+  </div>
+  <p style="margin:6px 0 0">{{ i.situacao }}</p>
+  {% if i.status != "ok" %}<p class="peq" style="margin:4px 0 0">{{ i.passo }}</p>{% endif %}
+  {% if i.link %}<p style="margin:10px 0 0"><a class="btn sec" href="{{ i.link[0] }}">{{ i.link[1] }}</a></p>{% endif %}
+  {% if i.enderecos %}
+  <div style="margin-top:12px;display:grid;gap:8px">
+    {% for rotulo, valor in i.enderecos %}
+    <label>{{ rotulo }}
+      <div style="display:flex;gap:6px">
+        <input readonly value="{{ valor }}" style="flex:1;font-family:ui-monospace,monospace;font-size:13px" onclick="this.select()">
+        <button type="button" class="btn sec" onclick="navigator.clipboard.writeText(this.previousElementSibling.value);this.textContent='Copiado'">Copiar</button>
+      </div>
+    </label>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+<p class="peq">O passo a passo completo de cada integração está no README do repositório.</p>
+{% endblock %}

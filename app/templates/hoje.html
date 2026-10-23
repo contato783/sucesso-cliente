@@ -10,6 +10,21 @@
 </div>
 {% if request.query_params.get("sync") %}<div class="card peq" style="margin-bottom:16px">Sincronização iniciada. Recarregue a página em alguns minutos.</div>{% endif %}
 
+{% set prontas = integracoes|selectattr("status", "equalto", "ok")|list|length %}
+{% if not linhas %}
+<div class="card" style="margin-bottom:20px;border-color:var(--marca)">
+  <h3 style="font-size:18px">Comece por aqui 👋</h3>
+  <p class="peq" style="margin:0 0 12px">Três passos para o painel ganhar vida. Depois disso, ele se atualiza sozinho.</p>
+  <ol style="margin:0;padding-left:20px;display:grid;gap:10px">
+    <li><b>Traga seus clientes.</b> <a href="/clientes/importar">Importe a planilha da carteira</a> ou <a href="/clientes/novo">cadastre um cliente</a>.</li>
+    <li><b>Conecte as conversas.</b> Em <a href="/configuracoes">Configurações</a> estão os endereços para colar no WhatsApp e no Slack.</li>
+    <li><b>Registre o dia a dia.</b> Na página de cada cliente, anote consultorias (com a nota de 0 a 10) e os resultados conquistados.</li>
+  </ol>
+</div>
+{% elif prontas < integracoes|length %}
+<a class="card peq" href="/configuracoes" style="display:block;margin-bottom:16px;color:inherit">⚙️ Configuração: {{ prontas }} de {{ integracoes|length }} itens prontos. <span style="color:var(--marca)">Ver o que falta →</span></a>
+{% endif %}
+
 <div class="grade">
   <a class="card kpi" href="/carteira">
     <div class="rotulo">Clientes ativos</div>
@@ -36,7 +51,7 @@
 {% set grupos = [(1, "Fazer hoje", "risco"), (2, "Esta semana", "atencao"), (3, "Quando der", "neutro")] %}
 <h2>Prioridades {{ ajuda("Lista gerada automaticamente a partir dos dados de cada cliente. Dentro de cada grupo, o cliente mais crítico vem primeiro.") }}</h2>
 {% if not acoes %}
-<div class="card vazio">Nada pendente. 🎉</div>
+<div class="card vazio">{{ "Nada pendente. 🎉" if linhas else "As prioridades aparecem aqui assim que houver clientes cadastrados." }}</div>
 {% endif %}
 {% for prio, nome, cor in grupos %}
   {% set doGrupo = acoes|selectattr("prioridade", "equalto", prio)|list %}

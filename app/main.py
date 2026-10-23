@@ -1,10 +1,12 @@
+import asyncio
 import json
+import logging
 import secrets
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from pathlib import Path
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Request, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
@@ -12,19 +14,34 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import atendimento, health, leis, painel, sync
+from app import atendimento, health, importar, leis, painel, sync
 from app.config import get_settings
 from app.connectors import slack, whatsapp
 from app.db import SessionLocal, agora_utc, get_db, init_db
 from app.ingest import normalizar_telefone, salvar_interacao, vincular_orfas
 from app.models import Cliente, Consultoria, HealthSnapshot, Interacao, Marco, Parcela
 
+log = logging.getLogger(__name__)
+
+
+async def _sincronizar_periodicamente(minutos: int) -> None:
+    """Roda a sincronização de tempos em tempos, sem precisar de agendador externo."""
+    while True:
+        await asyncio.sleep(minutos * 60)
+        try:
+            await asyncio.to_thread(_sync_em_segundo_plano)
+        except Exception:  # uma falha não pode parar as próximas rodadas
+            log.exception("Falha na sincronização automática")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    minutos = get_settings().sync_automatico_minutos
+    tarefa = asyncio.create_task(_sincronizar_periodicamente(minutos)) if minutos > 0 else None
     yield
+    if tarefa:
+        tarefa.cancel()
 
 
 app = FastAPI(title="Sucesso do Cliente", lifespan=lifespan)
@@ -208,6 +225,77 @@ def _numero(v: str | None) -> float | None:
     return float(v.replace(".", "").replace(",", ".")) if "," in v else float(v)
 
 
+def _integracoes(request: Request, db: Session) -> list[dict]:
+    """Situação de cada fonte de dados, com o que falta fazer e os endereços para colar."""
+    s = get_settings()
+    base = str(request.base_url).rstrip("/")
+
+    def ultima(canal: str):
+        return db.scalar(select(func.max(Interacao.ocorrido_em)).where(Interacao.canal == canal))
+
+    def status(configurado: bool, recebendo: bool = True) -> str:
+        return "ok" if configurado and recebendo else ("atencao" if configurado else "pendente")
+
+    clientes = db.scalar(select(func.count()).select_from(Cliente)) or 0
+    pendentes = db.scalar(select(func.count()).select_from(Interacao).where(
+        Interacao.analisado.is_(False), Interacao.cliente_id.is_not(None))) or 0
+    wa, sl = ultima("whatsapp"), ultima("slack")
+    parcelas = db.scalar(select(func.count()).select_from(Parcela)) or 0
+    token_wa = f"?token={s.whatsapp_webhook_secret}" if s.whatsapp_webhook_secret else ""
+    return [
+        {"nome": "Clientes", "status": "ok" if clientes else "pendente",
+         "situacao": f"{clientes} cadastrado(s)" if clientes else "Nenhum cliente ainda",
+         "passo": "Importe sua planilha de clientes ou cadastre um por um.",
+         "link": ("/clientes/importar", "Importar planilha")},
+        {"nome": "Senha do painel", "status": status(bool(s.painel_token)),
+         "situacao": "Protegido por senha" if s.painel_token else "Sem senha: qualquer pessoa com o link entra",
+         "passo": "Defina PAINEL_TOKEN nas variáveis do servidor. Ao entrar, use qualquer usuário e essa senha."},
+        {"nome": "Claude (sentimento)", "status": status(bool(s.anthropic_api_key)),
+         "situacao": (f"Configurado · {pendentes} mensagem(ns) aguardando análise" if s.anthropic_api_key
+                      else "Sem chave: as conversas entram, mas sem leitura de sentimento"),
+         "passo": "Crie uma chave em console.anthropic.com e cole em ANTHROPIC_API_KEY."},
+        {"nome": "WhatsApp", "status": status(bool(s.whatsapp_verify_token or s.whatsapp_webhook_secret), wa is not None),
+         "situacao": f"Última mensagem: {wa:%d/%m %H:%M}" if wa else "Nenhuma mensagem recebida ainda",
+         "passo": "Cole o endereço abaixo no seu provedor de WhatsApp (Meta, Evolution API ou Z-API).",
+         "enderecos": [("Meta Cloud API · URL de callback", f"{base}/webhooks/whatsapp"),
+                       ("Meta Cloud API · token de verificação", s.whatsapp_verify_token or "defina WHATSAPP_VERIFY_TOKEN"),
+                       ("Evolution API ou Z-API · URL do webhook", f"{base}/webhooks/whatsapp{token_wa}")]},
+        {"nome": "Slack", "status": status(bool(s.slack_bot_token and s.slack_signing_secret), sl is not None),
+         "situacao": f"Última mensagem: {sl:%d/%m %H:%M}" if sl else "Nenhuma mensagem recebida ainda",
+         "passo": "Crie o app do Slack, preencha SLACK_BOT_TOKEN e SLACK_SIGNING_SECRET e cole o endereço em Event Subscriptions.",
+         "enderecos": [("Event Subscriptions · Request URL", f"{base}/webhooks/slack")]},
+        {"nome": "Sponte (financeiro)", "status": status(bool(s.sponte_codigo_cliente and s.sponte_token), parcelas > 0),
+         "situacao": f"{parcelas} parcela(s) sincronizada(s)" if parcelas else "Nenhuma parcela sincronizada",
+         "passo": "Peça ao suporte do Sponte o código de cliente, o token e a documentação da API."},
+        {"nome": "Sincronização automática", "status": "ok" if s.sync_automatico_minutos > 0 else "atencao",
+         "situacao": (f"A cada {s.sync_automatico_minutos} minutos" if s.sync_automatico_minutos > 0
+                      else "Desligada: use o botão Sincronizar"),
+         "passo": "Controlada por SYNC_AUTOMATICO_MINUTOS."},
+    ]
+
+
+@app.get("/configuracoes", response_class=HTMLResponse, dependencies=[Depends(autenticado)])
+def configuracoes(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(request, "configuracoes.html", {"itens": _integracoes(request, db)})
+
+
+@app.get("/clientes/importar", response_class=HTMLResponse, dependencies=[Depends(autenticado)])
+def importar_pagina(request: Request):
+    return templates.TemplateResponse(request, "importar.html", {"resultado": None})
+
+
+@app.get("/clientes/modelo.csv", dependencies=[Depends(autenticado)])
+def importar_modelo():
+    return Response(importar.modelo_csv(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="modelo-clientes.csv"'})
+
+
+@app.post("/clientes/importar", response_class=HTMLResponse, dependencies=[Depends(autenticado)])
+async def importar_enviar(request: Request, arquivo: UploadFile = File(...), db: Session = Depends(get_db)):
+    resultado = importar.importar(db, await arquivo.read())
+    return templates.TemplateResponse(request, "importar.html", {"resultado": resultado})
+
+
 @app.get("/", response_class=HTMLResponse, dependencies=[Depends(autenticado)])
 def hoje(request: Request, db: Session = Depends(get_db)):
     """Tela inicial: o que fazer hoje e como está a carteira nas 10 leis."""
@@ -222,6 +310,7 @@ def hoje(request: Request, db: Session = Depends(get_db)):
         "mrr_risco": sum(l.cliente.valor_mensal or 0 for l in linhas if l.health.faixa == "risco"),
         "leis": leis.calcular(db, linhas, atend),
         "orfas": db.scalar(select(func.count(func.distinct(Interacao.origem))).where(Interacao.cliente_id.is_(None))),
+        "integracoes": _integracoes(request, db),
     })
 
 
