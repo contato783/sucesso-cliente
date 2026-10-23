@@ -1,7 +1,7 @@
 """Rotinas de sincronização. Rode periodicamente com ``python -m app.cli sync``."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session

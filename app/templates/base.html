@@ -6,64 +6,141 @@
 <title>{% block titulo %}Sucesso do Cliente{% endblock %}</title>
 <style>
   :root {
-    --bg: #f6f7f9; --card: #fff; --texto: #1d2330; --suave: #687082; --borda: #e3e6ec;
-    --marca: #2d5bd7; --ok: #1f8a4c; --ok-bg: #e5f5ec; --at: #a86400; --at-bg: #fff2dc;
-    --risco: #c0362c; --risco-bg: #fde8e6;
+    --bg: #f5f6f8; --card: #fff; --texto: #1b2130; --suave: #667085; --borda: #e4e7ec; --hover: #f0f2f5;
+    --marca: #2f5bd3; --marca-bg: #eaf0ff;
+    --ok: #157a46; --ok-bg: #e3f4ea; --at: #9a5b00; --at-bg: #fff1d6;
+    --risco: #b42318; --risco-bg: #fdeceb; --cinza-bg: #eef0f3;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #12151b; --card: #1b1f27; --texto: #e7e9ee; --suave: #9aa1b0; --borda: #2c323d;
-      --marca: #7b9cff; --ok: #5fd08f; --ok-bg: #173323; --at: #f0b55a; --at-bg: #3a2b12;
-      --risco: #ff8a80; --risco-bg: #3d1a17;
+      --bg: #111419; --card: #1a1e26; --texto: #e8eaef; --suave: #9ba3b4; --borda: #2b313c; --hover: #222833;
+      --marca: #84a3ff; --marca-bg: #1f2a47;
+      --ok: #62d394; --ok-bg: #16301f; --at: #f2b65c; --at-bg: #3a2a10;
+      --risco: #ff8b80; --risco-bg: #3c1916; --cinza-bg: #262b35;
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--texto); }
-  header { background: var(--card); border-bottom: 1px solid var(--borda); padding: 12px 16px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
-  header strong { font-size: 17px; }
-  header a { color: var(--suave); text-decoration: none; }
-  header a:hover { color: var(--texto); }
-  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
-  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 17px; margin: 28px 0 10px; }
-  .sub { color: var(--suave); margin: 0 0 16px; }
-  .grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
-  .card { background: var(--card); border: 1px solid var(--borda); border-radius: 10px; padding: 14px 16px; }
-  .kpi .rotulo { color: var(--suave); font-size: 13px; }
-  .kpi .valor { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
-  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--borda); border-radius: 10px; overflow: hidden; }
-  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--borda); vertical-align: top; }
-  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); font-weight: 600; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--texto); }
+  a { color: var(--marca); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Estrutura: menu lateral + conteúdo */
+  .app { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 100vh; background: linear-gradient(to right, var(--card) 219px, var(--borda) 219px 220px, transparent 220px); }
+  nav.menu { padding: 20px 12px; position: sticky; top: 0; height: 100vh; }
+  nav.menu .marca { font-weight: 700; font-size: 16px; padding: 0 10px 18px; }
+  nav.menu .marca small { display: block; color: var(--suave); font-weight: 400; font-size: 12px; }
+  nav.menu a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; color: var(--texto); margin-bottom: 2px; }
+  nav.menu a:hover { background: var(--hover); text-decoration: none; }
+  nav.menu a.ativo { background: var(--marca-bg); color: var(--marca); font-weight: 600; }
+  nav.menu svg { width: 18px; height: 18px; flex: none; }
+  nav.menu .sep { border-top: 1px solid var(--borda); margin: 12px 0; }
+  main { padding: 28px 32px 64px; max-width: 1180px; width: 100%; min-width: 0; }
+  @media (max-width: 820px) {
+    .app { grid-template-columns: minmax(0, 1fr); background: none; }
+    nav.menu { background: var(--card); position: static; height: auto; display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 12px; border-right: 0; border-bottom: 1px solid var(--borda); }
+    nav.menu .marca { width: 100%; padding: 0 4px 6px; }
+    nav.menu .marca small, nav.menu .sep { display: none; }
+    nav.menu a { padding: 6px 10px; font-size: 14px; }
+    main { padding: 20px 16px 48px; }
+  }
+
+  /* Tipografia */
+  h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
+  h2 { font-size: 17px; margin: 32px 0 12px; display: flex; align-items: center; gap: 8px; }
+  h3 { font-size: 15px; margin: 0 0 6px; }
+  .sub { color: var(--suave); margin: 4px 0 0; }
+  .peq { font-size: 13px; color: var(--suave); }
+  .cabecalho { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; margin-bottom: 20px; }
+
+  /* Blocos */
+  .grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 16px; }
+  .kpi .rotulo { color: var(--suave); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+  .kpi .valor { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 4px; }
+  .kpi .nota { font-size: 12px; color: var(--suave); margin-top: 4px; }
+  a.kpi { color: inherit; display: block; }
+  a.kpi:hover { text-decoration: none; border-color: var(--marca); }
+
+  /* Ajuda: passe o mouse no ? */
+  .ajuda { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--cinza-bg); color: var(--suave); font-size: 11px; font-weight: 700; cursor: help; flex: none; }
+
+  /* Selos */
+  .selo { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .saudavel, .ok { background: var(--ok-bg); color: var(--ok); }
+  .atencao { background: var(--at-bg); color: var(--at); }
+  .risco, .critico { background: var(--risco-bg); color: var(--risco); }
+  .sem_dados, .neutro { background: var(--cinza-bg); color: var(--suave); }
+  .ponto { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: currentColor; }
+
+  /* Tabelas */
+  .tabela { overflow-x: auto; background: var(--card); border: 1px solid var(--borda); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--borda); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); font-weight: 600; background: var(--card); white-space: nowrap; }
   td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; }
   tr:last-child td { border-bottom: 0; }
-  .rolagem { overflow-x: auto; }
-  a { color: var(--marca); }
-  .selo { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-  .saudavel { background: var(--ok-bg); color: var(--ok); }
-  .atencao { background: var(--at-bg); color: var(--at); }
-  .risco { background: var(--risco-bg); color: var(--risco); }
-  .alertas { margin: 0; padding-left: 18px; color: var(--suave); font-size: 13px; }
-  .barra { height: 6px; background: var(--borda); border-radius: 3px; overflow: hidden; min-width: 60px; }
-  .barra > span { display: block; height: 100%; background: var(--marca); }
-  .btn { display: inline-block; background: var(--marca); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; text-decoration: none; }
-  .btn.sec { background: transparent; color: var(--marca); border: 1px solid var(--borda); }
-  form.campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  tr.clicavel { cursor: pointer; }
+  tr.clicavel:hover td { background: var(--hover); }
+  .vazio { color: var(--suave); padding: 24px; text-align: center; }
+
+  /* Barras de pilar */
+  .barra { height: 6px; background: var(--cinza-bg); border-radius: 3px; overflow: hidden; min-width: 48px; }
+  .barra > span { display: block; height: 100%; border-radius: 3px; }
+  .b-ok { background: var(--ok); } .b-at { background: var(--at); } .b-risco { background: var(--risco); }
+  .pilares { display: grid; grid-template-columns: repeat(4, minmax(56px, 1fr)); gap: 10px; min-width: 260px; }
+  .pilares .p { font-size: 11px; color: var(--suave); }
+  .pilares .p b { color: var(--texto); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+  .alertas { margin: 0; padding-left: 18px; font-size: 13px; color: var(--suave); }
+
+  /* Botões e formulários */
+  .btn { display: inline-flex; align-items: center; gap: 6px; background: var(--marca); color: #fff; border: 0; border-radius: 8px; padding: 9px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn:hover { text-decoration: none; filter: brightness(1.08); }
+  .btn.sec { background: var(--card); color: var(--texto); border: 1px solid var(--borda); font-weight: 500; }
+  form.campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--suave); }
-  input, select, textarea { font: inherit; padding: 7px 9px; border: 1px solid var(--borda); border-radius: 7px; background: var(--card); color: var(--texto); }
-  textarea { min-height: 90px; }
+  label small { font-size: 12px; }
+  input, select, textarea { font: inherit; color: var(--texto); padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; background: var(--card); }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--marca); outline-offset: -1px; }
+  textarea { min-height: 80px; resize: vertical; }
   .inteiro { grid-column: 1 / -1; }
-  .msg { font-size: 14px; }
-  .msg .meta { color: var(--suave); font-size: 12px; }
-  .vazio { color: var(--suave); padding: 16px; text-align: center; }
-  .linha { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; margin-bottom: 12px; }
+  fieldset { border: 1px solid var(--borda); border-radius: 12px; padding: 16px; margin: 0 0 16px; background: var(--card); }
+  legend { font-weight: 600; padding: 0 6px; }
+  legend small { font-weight: 400; color: var(--suave); }
+  .filtros { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+  .filtros label { min-width: 150px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .chip { padding: 6px 12px; border-radius: 99px; border: 1px solid var(--borda); background: var(--card); color: var(--texto); font-size: 14px; }
+  .chip:hover { text-decoration: none; border-color: var(--marca); }
+  .chip.ativo { background: var(--marca); border-color: var(--marca); color: #fff; }
+
+  details.acao { background: var(--card); border: 1px solid var(--borda); border-radius: 12px; margin-bottom: 12px; }
+  details.acao > summary { cursor: pointer; padding: 14px 16px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
+  details.acao > summary::after { content: "+"; color: var(--marca); font-size: 18px; line-height: 1; }
+  details.acao[open] > summary::after { content: "−"; }
+  details.acao > div { padding: 0 16px 16px; }
 </style>
 </head>
 <body>
-<header>
-  <strong>Sucesso do Cliente</strong>
-  <a href="/">Carteira</a>
-  <a href="/pendentes">Contatos sem cliente</a>
-  <a href="/clientes/novo">Novo cliente</a>
-</header>
-<main>{% block conteudo %}{% endblock %}</main>
+{% set pagina = request.url.path %}
+<div class="app">
+  <nav class="menu">
+    <div class="marca">Sucesso do Cliente<small>saúde da base e atendimento</small></div>
+    <a href="/" class="{{ 'ativo' if pagina == '/' }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Hoje</a>
+    <a href="/carteira" class="{{ 'ativo' if pagina.startswith('/carteira') or pagina.startswith('/clientes') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Carteira</a>
+    <a href="/atendimento" class="{{ 'ativo' if pagina == '/atendimento' }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Atendimento</a>
+    <a href="/leis" class="{{ 'ativo' if pagina == '/leis' }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>10 Leis do CS</a>
+    <div class="sep"></div>
+    <a href="/pendentes" class="{{ 'ativo' if pagina == '/pendentes' }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Contatos sem cliente</a>
+    <a href="/clientes/novo" class="{{ 'ativo' if pagina == '/clientes/novo' }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Novo cliente</a>
+  </nav>
+  <main>{% block conteudo %}{% endblock %}</main>
+</div>
 </body>
 </html>

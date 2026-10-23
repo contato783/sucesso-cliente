@@ -1,0 +1,28 @@
+{% macro selo_saude(h) -%}
+<span class="selo {{ h.faixa }}"><span class="ponto"></span>{{ h.score|round|int }} · {{ FAIXAS[h.faixa] }}</span>
+{%- endmacro %}
+
+{% macro cor_barra(v) -%}{{ 'b-ok' if v >= 70 else ('b-at' if v >= 40 else 'b-risco') }}{%- endmacro %}
+
+{% macro pilares(h) -%}
+<div class="pilares">
+  {% for nome, v, dica in [
+      ("Engaj.", h.engajamento, "Engajamento: quão recente e frequente o cliente fala com vocês"),
+      ("Sentim.", h.sentimento, "Sentimento: o tom das mensagens do cliente, lido pelo Claude"),
+      ("Financ.", h.financeiro, "Financeiro: parcelas em dia ou atrasadas no Sponte"),
+      ("Result.", h.resultado, "Resultado: presença nas consultorias, tarefas cumpridas, nota e progresso")] %}
+  <div class="p" title="{{ dica }}">
+    {{ nome }} <b>{{ v|round|int if v is not none else "—" }}</b>
+    <div class="barra">{% if v is not none %}<span class="{{ cor_barra(v) }}" style="width:{{ v }}%"></span>{% endif %}</div>
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro tempo(minutos) -%}
+{% if minutos is none %}—{% elif minutos < 60 %}{{ minutos|round|int }} min{% else %}{{ (minutos / 60)|round(1)|string|replace(".", ",") }} h{% endif %}
+{%- endmacro %}
+
+{% macro ajuda(texto) -%}<span class="ajuda" title="{{ texto }}">?</span>{%- endmacro %}
+
+{% macro selo_lei(status) -%}<span class="selo {{ status }}"><span class="ponto"></span>{{ STATUS_LEI[status] }}</span>{%- endmacro %}

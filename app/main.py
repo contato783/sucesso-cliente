@@ -1,7 +1,7 @@
 import json
-from contextlib import asynccontextmanager
 import secrets
-from datetime import date, datetime, timedelta
+from contextlib import asynccontextmanager
+from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Request, Response
@@ -12,12 +12,14 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import atendimento, health, sync
+from app import atendimento, health, leis, painel, sync
 from app.config import get_settings
 from app.connectors import slack, whatsapp
 from app.db import SessionLocal, agora_utc, get_db, init_db
 from app.ingest import normalizar_telefone, salvar_interacao, vincular_orfas
-from app.models import Cliente, Consultoria, HealthSnapshot, Interacao, Parcela
+from app.models import Cliente, Consultoria, HealthSnapshot, Interacao, Marco, Parcela
+
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -33,7 +35,8 @@ templates.env.filters["brl"] = lambda v: (
 basic = HTTPBasic(auto_error=False)
 
 FAIXAS = {"saudavel": "Saudável", "atencao": "Atenção", "risco": "Risco"}
-templates.env.globals["FAIXAS"] = FAIXAS
+TIPOS_MARCO = {"primeiro_valor": "Primeiro resultado", "meta": "Meta atingida", "ganho": "Ganho mensurável"}
+templates.env.globals.update(FAIXAS=FAIXAS, TIPOS_MARCO=TIPOS_MARCO, AREAS=health.AREAS, STATUS_LEI=leis.STATUS)
 
 
 def autenticado(cred: HTTPBasicCredentials | None = Depends(basic)) -> None:
@@ -102,6 +105,14 @@ class InteracaoIn(BaseModel):
     external_id: str | None = None
 
 
+class MarcoIn(BaseModel):
+    cliente_id: int
+    data: date
+    tipo: str = "meta"  # primeiro_valor | meta | ganho
+    descricao: str
+    valor_gerado: float | None = None
+
+
 class ConsultoriaIn(BaseModel):
     cliente_id: int
     data: datetime
@@ -134,6 +145,28 @@ def api_consultoria(dados: ConsultoriaIn, db: Session = Depends(get_db)):
     return {"id": c.id}
 
 
+@app.post("/api/marcos", dependencies=[Depends(autenticado)])
+def api_marco(dados: MarcoIn, db: Session = Depends(get_db)):
+    if not db.get(Cliente, dados.cliente_id):
+        raise HTTPException(404, "Cliente não encontrado")
+    if dados.tipo not in TIPOS_MARCO:
+        raise HTTPException(422, f"tipo deve ser um de: {', '.join(TIPOS_MARCO)}")
+    m = Marco(**dados.model_dump())
+    db.add(m)
+    db.commit()
+    return {"id": m.id}
+
+
+@app.get("/api/leis", dependencies=[Depends(autenticado)])
+def api_leis(db: Session = Depends(get_db)):
+    """As 10 leis em JSON, para levar a uma planilha ou reunião."""
+    linhas = painel.carregar(db)
+    return [{"numero": l.numero, "titulo": l.titulo, "pergunta": l.pergunta, "valor": l.valor, "meta": l.meta,
+             "status": l.status, "detalhe": l.detalhe, "indicadores": dict(l.tabela),
+             "clientes": [{"id": c.id, "nome": c.nome, "motivo": m} for c, m in l.clientes]}
+            for l in leis.calcular(db, linhas, painel.atendimento_recente(db))]
+
+
 @app.get("/api/clientes", dependencies=[Depends(autenticado)])
 def api_clientes(db: Session = Depends(get_db)):
     saida = []
@@ -142,7 +175,7 @@ def api_clientes(db: Session = Depends(get_db)):
         saida.append({"id": c.id, "nome": c.nome, "empresa": c.empresa, "programa": c.programa,
                       "score": h.score, "faixa": h.faixa, "engajamento": h.engajamento,
                       "sentimento": h.sentimento, "financeiro": h.financeiro, "resultado": h.resultado,
-                      "alertas": h.alertas})
+                      "alertas": [{"texto": str(a), "area": a.area} for a in h.alertas]})
     return sorted(saida, key=lambda x: x["score"])
 
 
@@ -160,32 +193,70 @@ def _registrar_consultoria(db: Session, c: Consultoria) -> Consultoria:
 
 # ---------------------------------------------------------------- painel
 
-def _carteira(db: Session) -> list[dict]:
-    linhas = []
-    for c in db.scalars(select(Cliente).where(Cliente.status == "ativo")):
-        linhas.append({"cliente": c, "health": health.calcular_cliente(db, c)})
-    return sorted(linhas, key=lambda x: x["health"].score)
+def _404():
+    raise HTTPException(404)
+
+
+def _vazio(v: str | None):
+    return v.strip() if v and v.strip() else None
+
+
+def _numero(v: str | None) -> float | None:
+    v = _vazio(v)
+    if v is None:
+        return None
+    return float(v.replace(".", "").replace(",", ".")) if "," in v else float(v)
 
 
 @app.get("/", response_class=HTMLResponse, dependencies=[Depends(autenticado)])
-def painel(request: Request, db: Session = Depends(get_db)):
-    carteira = _carteira(db)
-    contagem = {f: sum(1 for l in carteira if l["health"].faixa == f) for f in FAIXAS}
-    mrr_risco = sum(l["cliente"].valor_mensal or 0 for l in carteira if l["health"].faixa == "risco")
-    score_medio = round(sum(l["health"].score for l in carteira) / len(carteira), 1) if carteira else None
-    desde = agora_utc() - timedelta(days=30)
-    interacoes = db.scalars(select(Interacao).where(Interacao.ocorrido_em >= desde)).all()
+def hoje(request: Request, db: Session = Depends(get_db)):
+    """Tela inicial: o que fazer hoje e como está a carteira nas 10 leis."""
+    linhas = painel.carregar(db)
+    atend = painel.atendimento_recente(db)
+    lista = painel.acoes(db, linhas, atend)
+    contagem = {f: sum(1 for l in linhas if l.health.faixa == f) for f in FAIXAS}
+    return templates.TemplateResponse(request, "hoje.html", {
+        "linhas": linhas, "contagem": contagem, "acoes": lista,
+        "score_medio": round(sum(l.health.score for l in linhas) / len(linhas), 1) if linhas else None,
+        "mrr": sum(l.cliente.valor_mensal or 0 for l in linhas),
+        "mrr_risco": sum(l.cliente.valor_mensal or 0 for l in linhas if l.health.faixa == "risco"),
+        "leis": leis.calcular(db, linhas, atend),
+        "orfas": db.scalar(select(func.count(func.distinct(Interacao.origem))).where(Interacao.cliente_id.is_(None))),
+    })
+
+
+@app.get("/carteira", response_class=HTMLResponse, dependencies=[Depends(autenticado)])
+def carteira(request: Request, db: Session = Depends(get_db), faixa: str = "", cs: str = "", programa: str = "",
+             busca: str = ""):
+    todas = painel.carregar(db)
+    linhas = [l for l in todas
+              if (not faixa or l.health.faixa == faixa)
+              and (not cs or l.cliente.responsavel_cs == cs)
+              and (not programa or l.cliente.programa == programa)
+              and (not busca or busca.lower() in f"{l.cliente.nome} {l.cliente.empresa or ''}".lower())]
+    return templates.TemplateResponse(request, "carteira.html", {
+        "linhas": linhas, "total": len(todas),
+        "contagem": {f: sum(1 for l in todas if l.health.faixa == f) for f in FAIXAS},
+        "filtros": {"faixa": faixa, "cs": cs, "programa": programa, "busca": busca},
+        "opcoes_cs": sorted({l.cliente.responsavel_cs for l in todas if l.cliente.responsavel_cs}),
+        "opcoes_programa": sorted({l.cliente.programa for l in todas if l.cliente.programa}),
+        "hoje": date.today(),
+    })
+
+
+@app.get("/atendimento", response_class=HTMLResponse, dependencies=[Depends(autenticado)])
+def atendimento_pagina(request: Request, db: Session = Depends(get_db)):
     nomes = {c.id: c.nome for c in db.scalars(select(Cliente))}
-    orfas = db.scalar(select(func.count(func.distinct(Interacao.origem))).where(Interacao.cliente_id.is_(None)))
-    renovacoes = sorted(
-        (l for l in carteira if l["cliente"].data_renovacao
-         and 0 <= (l["cliente"].data_renovacao - date.today()).days <= 60),
-        key=lambda l: l["cliente"].data_renovacao,
-    )
-    return templates.TemplateResponse(request, "painel.html", {
-        "carteira": carteira, "contagem": contagem, "mrr_risco": mrr_risco, "score_medio": score_medio,
-        "atend": atendimento.calcular(list(interacoes)), "nomes": nomes, "orfas": orfas,
-        "renovacoes": renovacoes,
+    return templates.TemplateResponse(request, "atendimento.html", {
+        "atend": painel.atendimento_recente(db), "nomes": nomes,
+    })
+
+
+@app.get("/leis", response_class=HTMLResponse, dependencies=[Depends(autenticado)])
+def leis_pagina(request: Request, db: Session = Depends(get_db)):
+    linhas = painel.carregar(db)
+    return templates.TemplateResponse(request, "leis.html", {
+        "leis": leis.calcular(db, linhas, painel.atendimento_recente(db)),
     })
 
 
@@ -200,33 +271,37 @@ def cliente_editar(cid: int, request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(request, "cliente_form.html", {"c": c})
 
 
-def _404():
-    raise HTTPException(404)
-
-
-def _vazio(v: str | None):
-    return v.strip() if v and v.strip() else None
-
-
 @app.post("/clientes/salvar", dependencies=[Depends(autenticado)])
 def cliente_salvar(
     db: Session = Depends(get_db),
     id: int | None = Form(None), nome: str = Form(...), empresa: str = Form(""), programa: str = Form(""),
     responsavel_cs: str = Form(""), telefone: str = Form(""), whatsapp_grupo_id: str = Form(""),
     slack_channel_id: str = Form(""), sponte_id: str = Form(""), valor_mensal: str = Form(""),
-    data_inicio: str = Form(""), data_renovacao: str = Form(""), progresso: str = Form(""),
-    status: str = Form("ativo"),
+    valor_inicial: str = Form(""), data_inicio: str = Form(""), data_renovacao: str = Form(""),
+    progresso: str = Form(""), status: str = Form("ativo"), fit: str = Form(""), vendedor: str = Form(""),
+    resultado_esperado: str = Form(""), motivo_cancelamento: str = Form(""), data_cancelamento: str = Form(""),
 ):
     c = db.get(Cliente, id) if id else Cliente()
     c.nome, c.empresa, c.programa = nome.strip(), _vazio(empresa), _vazio(programa)
-    c.responsavel_cs, c.status = _vazio(responsavel_cs), status
+    c.responsavel_cs, c.vendedor = _vazio(responsavel_cs), _vazio(vendedor)
+    c.fit = fit if fit in ("alto", "medio", "baixo") else None
+    c.resultado_esperado = _vazio(resultado_esperado)
     c.telefone = normalizar_telefone(telefone)
     c.whatsapp_grupo_id, c.slack_channel_id, c.sponte_id = (
         _vazio(whatsapp_grupo_id), _vazio(slack_channel_id), _vazio(sponte_id))
-    c.valor_mensal = float(valor_mensal.replace(".", "").replace(",", ".")) if _vazio(valor_mensal) else None
+    c.valor_mensal = _numero(valor_mensal)
+    # O primeiro valor vira a base para medir expansão/retenção de receita (Lei 8)
+    c.valor_inicial = _numero(valor_inicial) or c.valor_inicial or c.valor_mensal
     c.data_inicio = date.fromisoformat(data_inicio) if _vazio(data_inicio) else None
     c.data_renovacao = date.fromisoformat(data_renovacao) if _vazio(data_renovacao) else None
     c.progresso = max(0, min(100, int(progresso))) if _vazio(progresso) else None
+    c.status = status
+    if status == "cancelado":
+        c.data_cancelamento = (date.fromisoformat(data_cancelamento) if _vazio(data_cancelamento)
+                               else c.data_cancelamento or date.today())
+        c.motivo_cancelamento = _vazio(motivo_cancelamento)
+    else:
+        c.data_cancelamento = c.motivo_cancelamento = None
     db.add(c)
     db.commit()
     vincular_orfas(db, c)
@@ -236,21 +311,26 @@ def cliente_salvar(
 @app.get("/clientes/{cid}", response_class=HTMLResponse, dependencies=[Depends(autenticado)])
 def cliente_detalhe(cid: int, request: Request, db: Session = Depends(get_db)):
     c = db.get(Cliente, cid) or _404()
+    h = health.calcular_cliente(db, c)
     interacoes = db.scalars(
         select(Interacao).where(Interacao.cliente_id == cid).order_by(Interacao.ocorrido_em.desc())
     ).all()
+    atend = atendimento.calcular(list(interacoes), dias=90)
+    linha = painel.Linha(c, h)
     return templates.TemplateResponse(request, "cliente.html", {
-        "c": c,
-        "h": health.calcular_cliente(db, c),
-        "atend": atendimento.calcular(list(interacoes), dias=90),
+        "c": c, "h": h, "atend": atend,
+        "acoes": painel.acoes(db, [linha], atend) if c.status == "ativo" else [],
         "interacoes": interacoes[:100],
         "consultorias": db.scalars(select(Consultoria).where(Consultoria.cliente_id == cid)
                                    .order_by(Consultoria.data.desc())).all(),
         "parcelas": db.scalars(select(Parcela).where(Parcela.cliente_id == cid)
                                .order_by(Parcela.vencimento.desc())).all(),
+        "marcos": db.scalars(select(Marco).where(Marco.cliente_id == cid).order_by(Marco.data.desc())).all(),
         "historico": db.scalars(select(HealthSnapshot).where(HealthSnapshot.cliente_id == cid)
                                 .order_by(HealthSnapshot.data.desc()).limit(90)).all()[::-1],
         "hoje": date.today(),
+        "meta_toque": get_settings().meta_toque_dias,
+        "meta_primeiro_valor": get_settings().meta_primeiro_valor_dias,
     })
 
 
@@ -268,7 +348,17 @@ def consultoria_salvar(
         tarefas_combinadas=tarefas_combinadas, tarefas_cumpridas=tarefas_cumpridas,
         nota_cliente=int(nota_cliente) if _vazio(nota_cliente) else None, notas=_vazio(notas),
     ))
-    return RedirectResponse(f"/clientes/{cid}", status_code=303)
+    return RedirectResponse(f"/clientes/{cid}#consultorias", status_code=303)
+
+
+@app.post("/clientes/{cid}/marcos", dependencies=[Depends(autenticado)])
+def marco_salvar(cid: int, db: Session = Depends(get_db), data: str = Form(...), tipo: str = Form("meta"),
+                 descricao: str = Form(...), valor_gerado: str = Form("")):
+    db.get(Cliente, cid) or _404()
+    db.add(Marco(cliente_id=cid, data=date.fromisoformat(data), tipo=tipo if tipo in TIPOS_MARCO else "meta",
+                 descricao=descricao.strip(), valor_gerado=_numero(valor_gerado)))
+    db.commit()
+    return RedirectResponse(f"/clientes/{cid}#resultados", status_code=303)
 
 
 @app.get("/pendentes", response_class=HTMLResponse, dependencies=[Depends(autenticado)])

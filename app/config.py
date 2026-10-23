@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     peso_financeiro: float = 25
     peso_resultado: float = 20
 
+    # Metas das 10 leis
+    meta_primeiro_valor_dias: int = 30  # Lei 7
+    meta_toque_dias: int = 14  # Lei 2: contato proativo da equipe
+
 
 @lru_cache
 def get_settings() -> Settings:

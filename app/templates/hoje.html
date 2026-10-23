@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_macros.html" import selo_lei, ajuda %}
+{% block conteudo %}
+<div class="cabecalho">
+  <div>
+    <h1>Hoje</h1>
+    <p class="sub">O que precisa da sua atenção agora e como a carteira está nas 10 leis do Customer Success.</p>
+  </div>
+  <form method="post" action="/sync"><button class="btn sec" title="Puxa Sponte e Slack, analisa sentimento e recalcula os scores">↻ Sincronizar dados</button></form>
+</div>
+{% if request.query_params.get("sync") %}<div class="card peq" style="margin-bottom:16px">Sincronização iniciada. Recarregue a página em alguns minutos.</div>{% endif %}
+
+<div class="grade">
+  <a class="card kpi" href="/carteira">
+    <div class="rotulo">Clientes ativos</div>
+    <div class="valor">{{ linhas|length }}</div>
+    <div class="nota">{{ mrr|brl }} por mês</div>
+  </a>
+  <a class="card kpi" href="/carteira">
+    <div class="rotulo">Saúde média {{ ajuda("Média do health score (0 a 100). 70+ é saudável, 40 a 69 é atenção, abaixo de 40 é risco.") }}</div>
+    <div class="valor">{{ ("%.0f"|format(score_medio)) if score_medio is not none else "—" }}</div>
+    <div class="nota"><span style="color:var(--ok)">{{ contagem.saudavel }} saudáveis</span> · <span style="color:var(--at)">{{ contagem.atencao }} atenção</span></div>
+  </a>
+  <a class="card kpi" href="/carteira?faixa=risco">
+    <div class="rotulo">Em risco</div>
+    <div class="valor" style="color:var(--risco)">{{ contagem.risco }}</div>
+    <div class="nota">{{ mrr_risco|brl }} por mês em jogo</div>
+  </a>
+  <a class="card kpi" href="/leis">
+    <div class="rotulo">Leis no caminho {{ ajuda("Quantas das 10 leis estão dentro da meta.") }}</div>
+    <div class="valor">{{ leis|selectattr("status", "equalto", "ok")|list|length }}<span class="peq" style="font-size:16px"> de 10</span></div>
+    <div class="nota">{{ leis|selectattr("status", "equalto", "critico")|list|length }} críticas</div>
+  </a>
+</div>
+
+{% set grupos = [(1, "Fazer hoje", "risco"), (2, "Esta semana", "atencao"), (3, "Quando der", "neutro")] %}
+<h2>Prioridades {{ ajuda("Lista gerada automaticamente a partir dos dados de cada cliente. Dentro de cada grupo, o cliente mais crítico vem primeiro.") }}</h2>
+{% if not acoes %}
+<div class="card vazio">Nada pendente. 🎉</div>
+{% endif %}
+{% for prio, nome, cor in grupos %}
+  {% set doGrupo = acoes|selectattr("prioridade", "equalto", prio)|list %}
+  {% if doGrupo %}
+  <details class="acao" {{ "open" if prio < 3 }}>
+    <summary><span>{{ nome }} <span class="selo {{ cor }}" style="margin-left:6px">{{ doGrupo|length }}</span></span></summary>
+    <div class="tabela" style="border:0">
+      <table>
+        {% for a in doGrupo[:40] %}
+        <tr class="clicavel" onclick="location.href='/clientes/{{ a.cliente.id }}'">
+          <td style="width:28%"><a href="/clientes/{{ a.cliente.id }}"><b>{{ a.cliente.nome }}</b></a><div class="peq">{{ a.cliente.responsavel_cs or "sem responsável" }}</div></td>
+          <td>{{ a.texto }}</td>
+          <td style="white-space:nowrap" class="peq">{{ AREAS[a.area] }} · Lei {{ a.lei }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% if doGrupo|length > 40 %}<p class="peq">E mais {{ doGrupo|length - 40 }}…</p>{% endif %}
+    </div>
+  </details>
+  {% endif %}
+{% endfor %}
+
+{% if orfas %}
+<div class="card peq">🔗 <a href="/pendentes">{{ orfas }} contato(s) mandaram mensagem e ainda não estão ligados a nenhum cliente.</a></div>
+{% endif %}
+
+<h2>As 10 leis do Customer Success <a class="peq" style="font-weight:400" href="/leis">ver detalhes →</a></h2>
+<div class="grade" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr))">
+  {% for l in leis %}
+  <a class="card kpi" href="/leis#lei-{{ l.numero }}">
+    <div class="rotulo" style="justify-content:space-between"><span>Lei {{ l.numero }}</span>{{ selo_lei(l.status) }}</div>
+    <div style="font-weight:600;margin-top:6px;line-height:1.3">{{ l.titulo }}</div>
+    <div class="valor" style="font-size:22px">{{ l.valor }}</div>
+    <div class="nota">Meta: {{ l.meta }}</div>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

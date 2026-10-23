@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_macros.html" import selo_saude, pilares, ajuda %}
+{% block conteudo %}
+<div class="cabecalho">
+  <div>
+    <h1>Carteira</h1>
+    <p class="sub">Do cliente mais crítico ao mais saudável. Clique em uma linha para abrir o cliente.</p>
+  </div>
+  <a class="btn" href="/clientes/novo">+ Novo cliente</a>
+</div>
+
+{% macro link_filtro(f) -%}/carteira?faixa={{ f }}&cs={{ filtros.cs|urlencode }}&programa={{ filtros.programa|urlencode }}&busca={{ filtros.busca|urlencode }}{%- endmacro %}
+<div class="chips">
+  <a class="chip {{ 'ativo' if not filtros.faixa }}" href="{{ link_filtro('') }}">Todos · {{ total }}</a>
+  <a class="chip {{ 'ativo' if filtros.faixa == 'risco' }}" href="{{ link_filtro('risco') }}">Risco · {{ contagem.risco }}</a>
+  <a class="chip {{ 'ativo' if filtros.faixa == 'atencao' }}" href="{{ link_filtro('atencao') }}">Atenção · {{ contagem.atencao }}</a>
+  <a class="chip {{ 'ativo' if filtros.faixa == 'saudavel' }}" href="{{ link_filtro('saudavel') }}">Saudáveis · {{ contagem.saudavel }}</a>
+</div>
+
+<form class="filtros" method="get">
+  <input type="hidden" name="faixa" value="{{ filtros.faixa }}">
+  <label>Buscar <input name="busca" value="{{ filtros.busca }}" placeholder="Nome ou empresa"></label>
+  <label>Responsável CS
+    <select name="cs" onchange="this.form.submit()"><option value="">Todos</option>
+      {% for o in opcoes_cs %}<option {{ "selected" if o == filtros.cs }}>{{ o }}</option>{% endfor %}</select>
+  </label>
+  <label>Programa
+    <select name="programa" onchange="this.form.submit()"><option value="">Todos</option>
+      {% for o in opcoes_programa %}<option {{ "selected" if o == filtros.programa }}>{{ o }}</option>{% endfor %}</select>
+  </label>
+  <button class="btn sec">Filtrar</button>
+</form>
+
+<div class="tabela"><table>
+  <tr>
+    <th>Cliente</th>
+    <th>Saúde {{ ajuda("Health score de 0 a 100: engajamento, sentimento, financeiro e resultado") }}</th>
+    <th>Pilares {{ ajuda("Passe o mouse em cada pilar para ver o que ele mede") }}</th>
+    <th>Principal alerta</th>
+    <th class="num">Valor/mês</th>
+  </tr>
+  {% for l in linhas %}{% set h = l.health %}{% set c = l.cliente %}
+  <tr class="clicavel" onclick="location.href='/clientes/{{ c.id }}'">
+    <td><a href="/clientes/{{ c.id }}"><b>{{ c.nome }}</b></a>
+      <div class="peq">{{ [c.programa, c.responsavel_cs]|select|join(" · ") or "—" }}</div></td>
+    <td>{{ selo_saude(h) }}</td>
+    <td>{{ pilares(h) }}</td>
+    <td class="peq" style="max-width:300px">{{ h.alertas[0] if h.alertas else "Sem alertas" }}{% if h.alertas|length > 1 %} <span class="selo neutro">+{{ h.alertas|length - 1 }}</span>{% endif %}</td>
+    <td class="num">{{ c.valor_mensal|brl }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="vazio">Nenhum cliente encontrado. <a href="/clientes/novo">Cadastre um cliente</a>.</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

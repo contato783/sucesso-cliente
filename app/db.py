@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import get_settings
@@ -21,6 +21,21 @@ def init_db() -> None:
     from app import models  # noqa: F401  registra as tabelas
 
     Base.metadata.create_all(engine)
+    _adicionar_colunas_novas()
+
+
+def _adicionar_colunas_novas() -> None:
+    """create_all não altera tabelas existentes; acrescenta as colunas que faltam."""
+    existentes = inspect(engine)
+    with engine.begin() as conn:
+        for tabela in Base.metadata.sorted_tables:
+            if not existentes.has_table(tabela.name):
+                continue
+            colunas = {c["name"] for c in existentes.get_columns(tabela.name)}
+            for coluna in tabela.columns:
+                if coluna.name not in colunas:
+                    tipo = coluna.type.compile(engine.dialect)
+                    conn.execute(text(f'ALTER TABLE {tabela.name} ADD COLUMN {coluna.name} {tipo}'))
 
 
 def get_db():

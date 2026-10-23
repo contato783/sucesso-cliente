@@ -26,12 +26,30 @@ def test_fluxo_completo(db):
                     follow_redirects=False)
     assert r.status_code == 303
 
-    assert client.get("/").status_code == 200
+    for pagina in ("/", "/carteira", "/carteira?faixa=risco&busca=padaria", "/atendimento", "/leis", "/pendentes",
+                   f"/clientes/{cid}/editar", "/clientes/novo"):
+        assert client.get(pagina).status_code == 200, pagina
+
+    r = client.post(f"/clientes/{cid}/marcos", data={"data": "2026-10-01", "tipo": "primeiro_valor",
+                                                     "descricao": "Primeiro DRE", "valor_gerado": "1.000,00"},
+                    follow_redirects=False)
+    assert r.status_code == 303
+    assert "Primeiro DRE" in client.get(f"/clientes/{cid}").text
+
     pagina = client.get(f"/clientes/{cid}")
     assert pagina.status_code == 200 and "Não estou vendo resultado" in pagina.text
 
     [cli] = client.get("/api/clientes").json()
     assert cli["nome"] == "Padaria Bom Pão" and cli["resultado"] == 0
+    assert all("area" in a for a in cli["alertas"])
+
+    r = client.post("/clientes/salvar", data={"id": cid, "nome": "Padaria Bom Pão", "status": "cancelado",
+                                              "motivo_cancelamento": "Preço"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert len(client.get("/api/leis").json()) == 10
+    assert client.get("/api/clientes").json() == []
+    lei8 = client.get("/api/leis").json()[7]
+    assert lei8["clientes"][0]["motivo"].endswith("Preço")
 
     assert client.post("/webhooks/slack", json={"type": "url_verification", "challenge": "abc"}).json() == {"challenge": "abc"}
     app.dependency_overrides.clear()

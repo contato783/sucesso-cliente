@@ -11,6 +11,31 @@ Painel de saúde da base e de atendimento, alimentado por WhatsApp, Slack, Spont
 - **Calcula o health score** (0–100) de cada cliente e grava uma foto por dia, para acompanhar a evolução.
 - **Mede o atendimento**: volume por canal, tempo mediano de resposta, % respondidas em até 1h e conversas paradas há mais de 24h.
 
+## Telas
+
+- **Hoje**: a lista de prioridades gerada a partir dos dados (fazer hoje, esta semana, quando der), o resumo da carteira e o semáforo das 10 leis.
+- **Carteira**: todos os clientes do mais crítico ao mais saudável, com filtros por faixa, responsável e programa.
+- **Atendimento**: volume por canal, tempo de resposta e conversas paradas.
+- **10 Leis do CS**: cada lei com indicador, meta, o que fazer e os clientes que precisam de atenção.
+- **Cliente**: saúde e pilares, próximos passos, jornada (fit, tempo de casa, primeiro resultado, último contato, renovação), resultados conquistados, consultorias, financeiro e conversas.
+
+## As 10 leis do Customer Success (Nick Mehta)
+
+| Lei | Indicador | Meta padrão |
+|---|---|---|
+| 1. Venda para o cliente certo | % da carteira com fit alto ou médio; score por fit; fit baixo por vendedor | 90%+ |
+| 2. O distanciamento é natural | % de clientes com contato proativo da equipe nos últimos 14 dias | 90%+ |
+| 3. O cliente espera resultados extraordinários | % com resultado comprovado (meta ou ganho) em 90 dias; valor gerado | 70%+ |
+| 4. Monitore a saúde do cliente | % dos clientes em atenção/risco com ação da equipe em 7 dias | 90%+ |
+| 5. Relacionamento pessoal não garante fidelidade | Clientes com sentimento bom, mas sem resultado comprovado | nenhum |
+| 6. O produto é o diferencial escalável | Diferença de score médio entre responsáveis de CS; score por programa | até 10 pontos |
+| 7. Reduza o tempo até o primeiro resultado | Mediana de dias entre o início do contrato e o primeiro resultado | até 30 dias |
+| 8. Conheça profundamente seus indicadores | Churn de receita em 90 dias; MRR, churn de clientes, NRR 12 meses, motivos | até 5% |
+| 9. Gerencie CS com métricas concretas | NPS das notas dadas nas consultorias; tempo de resposta | 50+ |
+| 10. CS é responsabilidade de toda a empresa | De qual área vêm os alertas dos clientes em risco (comercial, financeiro, entrega, atendimento, CS) | até 10% da carteira em risco |
+
+Para alimentar as leis, preencha no cadastro do cliente o **fit**, **quem vendeu**, o **resultado esperado**, a **data de início** e o **valor inicial**; registre os **resultados conquistados** e a **nota** das consultorias na página do cliente; e, ao cancelar, informe **data e motivo**. As metas das leis 2 e 7 mudam no `.env` (`META_TOQUE_DIAS`, `META_PRIMEIRO_VALOR_DIAS`); as regras estão em `app/leis.py`. Os mesmos dados saem em JSON em `GET /api/leis`.
+
 ## Health score
 
 | Pilar | Peso padrão | Como é medido |
@@ -92,6 +117,17 @@ curl -u x:SEU_PAINEL_TOKEN -X POST https://SEU-DOMINIO/api/consultorias \
 
 As notas entram na linha do tempo e na análise de sentimento.
 
+Resultados do cliente (leis 3, 5 e 7) também podem vir por API:
+
+```bash
+curl -u x:SEU_PAINEL_TOKEN -X POST https://SEU-DOMINIO/api/marcos \
+  -H 'Content-Type: application/json' \
+  -d '{"cliente_id": 1, "data": "2026-10-23", "tipo": "ganho",
+       "descricao": "Reduziu 8% dos custos fixos", "valor_gerado": 12000}'
+```
+
+`tipo` pode ser `primeiro_valor`, `meta` ou `ganho`.
+
 ### Outras fontes
 
 `POST /api/interacoes` recebe qualquer interação (e-mail, formulário, ligação):
@@ -106,7 +142,9 @@ Preencha `ANTHROPIC_API_KEY`. As mensagens de cada cliente vão em lotes de até
 ```
 app/
   main.py          rotas: painel, webhooks e API
-  health.py        cálculo do health score
+  health.py        cálculo do health score e alertas por área
+  leis.py          as 10 leis do Customer Success
+  painel.py        carteira calculada e lista de prioridades
   atendimento.py   indicadores de atendimento
   sentiment.py     análise de sentimento com o Claude
   sync.py          rotinas de sincronização
@@ -117,5 +155,7 @@ tests/             pytest
 ```
 
 Testes: `pytest`.
+
+Ao atualizar o sistema, as colunas novas são criadas sozinhas no banco existente na próxima inicialização.
 
 Em produção, troque o SQLite por Postgres em `DATABASE_URL`. O sistema guarda conversas de clientes, então trate o banco e o `.env` como dados sensíveis (LGPD).

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "_macros.html" import selo_lei %}
+{% block conteudo %}
+<div class="cabecalho">
+  <div>
+    <h1>As 10 leis do Customer Success</h1>
+    <p class="sub">As premissas do livro <i>Customer Success</i>, de Nick Mehta, medidas com os dados da sua carteira.</p>
+  </div>
+</div>
+
+<div class="chips">
+  {% for st in ["ok", "atencao", "critico", "sem_dados"] %}
+  {% set n = leis|selectattr("status", "equalto", st)|list|length %}
+  {% if n %}<span class="selo {{ st }}" style="font-size:13px;padding:5px 12px"><span class="ponto"></span>{{ n }} {{ STATUS_LEI[st]|lower }}</span>{% endif %}
+  {% endfor %}
+</div>
+
+{% for l in leis %}
+<section class="card" id="lei-{{ l.numero }}" style="margin-bottom:14px;scroll-margin-top:16px">
+  <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:24px" class="lei-grade">
+    <div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+        <span class="selo neutro">Lei {{ l.numero }}</span>{{ selo_lei(l.status) }}
+      </div>
+      <h3 style="font-size:18px">{{ l.titulo }}</h3>
+      <p class="peq" style="margin:0 0 14px">{{ l.significado }}</p>
+      <div class="peq">{{ l.pergunta }}</div>
+      <div style="display:flex;gap:16px;align-items:baseline;flex-wrap:wrap">
+        <span style="font-size:32px;font-weight:650;font-variant-numeric:tabular-nums">{{ l.valor }}</span>
+        <span class="peq">meta: {{ l.meta }}</span>
+      </div>
+      {% if l.detalhe %}<div class="peq">{{ l.detalhe }}</div>{% endif %}
+      <p style="margin:14px 0 0;font-size:14px;background:var(--marca-bg);border-radius:8px;padding:10px 12px"><b>O que fazer:</b> {{ l.acao }}</p>
+    </div>
+    <div>
+      {% if l.tabela %}
+      <table style="font-size:14px">
+        {% for rotulo, valor in l.tabela %}
+        <tr><td style="padding:6px 0;color:var(--suave)">{{ rotulo }}</td><td class="num" style="padding:6px 0;font-weight:600">{{ valor }}</td></tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+      {% if l.clientes %}
+      <details style="margin-top:10px" {{ "open" if l.clientes|length <= 5 and l.status != "ok" }}>
+        <summary style="cursor:pointer;font-size:14px;font-weight:600">{{ l.clientes|length }} cliente(s) para olhar</summary>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:14px">
+          {% for c, motivo in l.clientes[:15] %}
+          <li><a href="/clientes/{{ c.id }}">{{ c.nome }}</a> <span class="peq">· {{ motivo }}</span></li>
+          {% endfor %}
+          {% if l.clientes|length > 15 %}<li class="peq">e mais {{ l.clientes|length - 15 }}</li>{% endif %}
+        </ul>
+      </details>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endfor %}
+<style>@media (max-width: 760px) { .lei-grade { grid-template-columns: 1fr !important; } }</style>
+{% endblock %}

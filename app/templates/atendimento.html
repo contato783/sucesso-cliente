@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tempo, ajuda %}
+{% block conteudo %}
+<div class="cabecalho">
+  <div>
+    <h1>Atendimento</h1>
+    <p class="sub">WhatsApp e Slack nos últimos 30 dias.</p>
+  </div>
+</div>
+
+<div class="grade">
+  <div class="card kpi"><div class="rotulo">Mensagens de clientes</div><div class="valor">{{ atend.mensagens_clientes }}</div></div>
+  <div class="card kpi"><div class="rotulo">Respostas da equipe</div><div class="valor">{{ atend.mensagens_equipe }}</div></div>
+  <div class="card kpi">
+    <div class="rotulo">Tempo de resposta {{ ajuda("Mediana do tempo entre a mensagem do cliente e a primeira resposta da equipe, na mesma conversa") }}</div>
+    <div class="valor">{{ tempo(atend.tempo_resposta_mediano_min) }}</div>
+  </div>
+  <div class="card kpi">
+    <div class="rotulo">Respondidas em até 1h</div>
+    <div class="valor">{{ "%.0f%%"|format(atend.respondidas_em_1h * 100) if atend.respondidas_em_1h is not none else "—" }}</div>
+  </div>
+  <div class="card kpi">
+    <div class="rotulo">Paradas há +24h</div>
+    <div class="valor" style="color:{{ 'var(--risco)' if atend.sem_resposta else 'var(--ok)' }}">{{ atend.sem_resposta|length }}</div>
+  </div>
+</div>
+
+<h2>Volume por canal</h2>
+<div class="card">
+  {% set total = atend.volume_por_canal.values()|sum %}
+  {% for canal, n in atend.volume_por_canal.items()|sort(attribute="1", reverse=true) %}
+  <div style="display:grid;grid-template-columns:100px 1fr 50px;gap:12px;align-items:center;margin:6px 0">
+    <span>{{ canal|capitalize }}</span>
+    <div class="barra" style="height:10px"><span class="b-ok" style="width:{{ 100 * n / total }}%;background:var(--marca)"></span></div>
+    <span class="num" style="text-align:right">{{ n }}</span>
+  </div>
+  {% else %}<p class="vazio">Nenhuma mensagem no período. Configure os webhooks do WhatsApp e do Slack.</p>{% endfor %}
+</div>
+
+<h2>Aguardando resposta há mais de 24h</h2>
+<div class="tabela"><table>
+  <tr><th>Cliente</th><th>Canal</th><th>Desde</th><th>Última mensagem</th></tr>
+  {% for m in atend.sem_resposta %}
+  <tr{% if m.cliente_id %} class="clicavel" onclick="location.href='/clientes/{{ m.cliente_id }}'"{% endif %}>
+    <td>{% if m.cliente_id %}<a href="/clientes/{{ m.cliente_id }}"><b>{{ nomes[m.cliente_id] }}</b></a>{% else %}{{ m.autor or m.origem }} <a class="peq" href="/pendentes">vincular</a>{% endif %}</td>
+    <td>{{ m.canal }}</td><td style="white-space:nowrap">{{ m.ocorrido_em.strftime("%d/%m %H:%M") }}</td>
+    <td>{{ m.texto[:180] }}</td>
+  </tr>
+  {% else %}<tr><td colspan="4" class="vazio">Nenhuma conversa parada. 👏</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

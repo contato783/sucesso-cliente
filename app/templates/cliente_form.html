@@ -1,27 +1,75 @@
 {% extends "base.html" %}
 {% block conteudo %}
-<h1>{{ "Editar " ~ c.nome if c else "Novo cliente" }}</h1>
-<p class="sub">Os campos de vínculo (telefone, grupo, canal do Slack, código Sponte) ligam as mensagens e o financeiro a este cliente.</p>
-<div class="card">
-<form class="campos" method="post" action="/clientes/salvar">
+{% macro v(campo) -%}{{ (c[campo] if c and c[campo] is not none else "") }}{%- endmacro %}
+{% macro brl_input(valor) -%}{{ ("%.2f"|format(valor)).replace(".", ",") if valor else "" }}{%- endmacro %}
+<p class="peq" style="margin:0 0 8px"><a href="{{ '/clientes/' ~ c.id if c else '/carteira' }}">← Voltar</a></p>
+<div class="cabecalho"><div>
+  <h1>{{ "Editar " ~ c.nome if c else "Novo cliente" }}</h1>
+  <p class="sub">Só o nome é obrigatório. Quanto mais completo, mais precisos ficam o score e as 10 leis.</p>
+</div></div>
+
+<form method="post" action="/clientes/salvar">
   {% if c %}<input type="hidden" name="id" value="{{ c.id }}">{% endif %}
-  <label>Nome * <input name="nome" required value="{{ c.nome if c else '' }}"></label>
-  <label>Empresa <input name="empresa" value="{{ c.empresa or '' if c else '' }}"></label>
-  <label>Programa <input name="programa" list="programas" value="{{ c.programa or '' if c else '' }}"></label>
-  <datalist id="programas"><option>PEP</option><option>MESP</option><option>Potencialize</option><option>PTZ</option><option>LEAP²</option><option>Nível X</option><option>Plenitude</option><option>In Company</option></datalist>
-  <label>Responsável CS <input name="responsavel_cs" value="{{ c.responsavel_cs or '' if c else '' }}"></label>
-  <label>WhatsApp (com DDD) <input name="telefone" placeholder="11 98765-4321" value="{{ c.telefone or '' if c else '' }}"></label>
-  <label>ID do grupo de WhatsApp <input name="whatsapp_grupo_id" placeholder="1203...@g.us" value="{{ c.whatsapp_grupo_id or '' if c else '' }}"></label>
-  <label>ID do canal no Slack <input name="slack_channel_id" placeholder="C0123ABCD" value="{{ c.slack_channel_id or '' if c else '' }}"></label>
-  <label>Código no Sponte <input name="sponte_id" value="{{ c.sponte_id or '' if c else '' }}"></label>
-  <label>Valor mensal (R$) <input name="valor_mensal" inputmode="decimal" value="{{ ('%.2f'|format(c.valor_mensal)).replace('.', ',') if c and c.valor_mensal else '' }}"></label>
-  <label>Início <input type="date" name="data_inicio" value="{{ c.data_inicio or '' if c else '' }}"></label>
-  <label>Renovação <input type="date" name="data_renovacao" value="{{ c.data_renovacao or '' if c else '' }}"></label>
-  <label>Progresso no programa (0–100) <input type="number" min="0" max="100" name="progresso" value="{{ c.progresso if c and c.progresso is not none else '' }}"></label>
-  <label>Status
-    <select name="status">{% for s in ["ativo", "pausado", "cancelado"] %}<option {{ "selected" if c and c.status == s }}>{{ s }}</option>{% endfor %}</select>
-  </label>
-  <div class="inteiro"><button class="btn">Salvar</button></div>
+
+  <fieldset><legend>Quem é</legend>
+    <div class="campos" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+      <label>Nome do cliente * <input name="nome" required value="{{ v('nome') }}"></label>
+      <label>Empresa <input name="empresa" value="{{ v('empresa') }}"></label>
+      <label>Programa <input name="programa" list="programas" value="{{ v('programa') }}"></label>
+      <datalist id="programas"><option>PEP</option><option>MESP</option><option>Potencialize</option><option>PTZ</option><option>LEAP²</option><option>Nível X</option><option>Plenitude</option><option>In Company</option></datalist>
+      <label>Responsável CS <input name="responsavel_cs" value="{{ v('responsavel_cs') }}"></label>
+    </div>
+  </fieldset>
+
+  <fieldset><legend>Venda e objetivo <small>· leis 1 e 3</small></legend>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+      <label>Está no perfil ideal (fit)?
+        <select name="fit">
+          <option value="">Não avaliado</option>
+          {% for k, rot in [("alto", "Alto: perfil ideal"), ("medio", "Médio: dá para atender bem"), ("baixo", "Baixo: fora do perfil")] %}
+          <option value="{{ k }}" {{ "selected" if c and c.fit == k }}>{{ rot }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Quem vendeu <input name="vendedor" value="{{ v('vendedor') }}"></label>
+      <label class="inteiro">Resultado que o cliente espera alcançar
+        <textarea name="resultado_esperado" placeholder="Ex.: Organizar o financeiro e ter 15% de margem líquida até junho">{{ v('resultado_esperado') }}</textarea>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset><legend>Contrato <small>· lei 8</small></legend>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+      <label>Valor mensal atual (R$) <input name="valor_mensal" inputmode="decimal" value="{{ brl_input(c.valor_mensal if c else none) }}"></label>
+      <label>Valor mensal no início (R$) <small>para medir expansão</small><input name="valor_inicial" inputmode="decimal" value="{{ brl_input(c.valor_inicial if c else none) }}"></label>
+      <label>Início do contrato <input type="date" name="data_inicio" value="{{ v('data_inicio') }}"></label>
+      <label>Renovação <input type="date" name="data_renovacao" value="{{ v('data_renovacao') }}"></label>
+      <label>Progresso no programa (0 a 100) <input type="number" min="0" max="100" name="progresso" value="{{ v('progresso') }}"></label>
+      <label>Situação
+        <select name="status" id="status">{% for s in ["ativo", "pausado", "cancelado"] %}<option {{ "selected" if c and c.status == s }}>{{ s }}</option>{% endfor %}</select>
+      </label>
+      <label class="cancel">Data do cancelamento <input type="date" name="data_cancelamento" value="{{ v('data_cancelamento') }}"></label>
+      <label class="cancel">Motivo do cancelamento
+        <input name="motivo_cancelamento" list="motivos" value="{{ v('motivo_cancelamento') }}">
+        <datalist id="motivos"><option>Não viu resultado</option><option>Preço</option><option>Momento da empresa</option><option>Fora do perfil</option><option>Atendimento</option><option>Foi para concorrente</option><option>Concluiu o programa</option></datalist>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset><legend>Canais <small>· liga as mensagens e o financeiro a este cliente</small></legend>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+      <label>WhatsApp (com DDD) <input name="telefone" placeholder="11 98765-4321" value="{{ v('telefone') }}"></label>
+      <label>ID do grupo de WhatsApp <input name="whatsapp_grupo_id" placeholder="1203...@g.us" value="{{ v('whatsapp_grupo_id') }}"></label>
+      <label>ID do canal no Slack <input name="slack_channel_id" placeholder="C0123ABCD" value="{{ v('slack_channel_id') }}"></label>
+      <label>Código no Sponte <input name="sponte_id" value="{{ v('sponte_id') }}"></label>
+    </div>
+  </fieldset>
+
+  <button class="btn">Salvar cliente</button>
 </form>
-</div>
+<script>
+  // Campos de cancelamento só aparecem quando a situação é "cancelado"
+  const status = document.getElementById("status");
+  const mostrar = () => document.querySelectorAll(".cancel").forEach(el => el.style.display = status.value === "cancelado" ? "" : "none");
+  status.addEventListener("change", mostrar); mostrar();
+</script>
 {% endblock %}

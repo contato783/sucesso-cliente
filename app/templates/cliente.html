@@ -1,111 +1,201 @@
 {% extends "base.html" %}
+{% from "_macros.html" import selo_saude, cor_barra, tempo, ajuda %}
 {% block titulo %}{{ c.nome }} · Sucesso do Cliente{% endblock %}
 {% block conteudo %}
-<div class="linha">
+<p class="peq" style="margin:0 0 8px"><a href="/carteira">← Carteira</a></p>
+<div class="cabecalho">
   <div>
-    <h1>{{ c.nome }} <span class="selo {{ h.faixa }}">{{ h.score|round|int }} · {{ FAIXAS[h.faixa] }}</span></h1>
-    <p class="sub">
-      {% set partes = [c.empresa, c.programa, "CS: " ~ c.responsavel_cs if c.responsavel_cs,
-                       c.valor_mensal|brl ~ "/mês" if c.valor_mensal,
-                       "renova em " ~ c.data_renovacao.strftime("%d/%m/%Y") if c.data_renovacao,
-                       c.status if c.status != "ativo"] %}
-      {{ partes|select|join(" · ") }}
-    </p>
+    <h1>{{ c.nome }}</h1>
+    <p class="sub">{{ [c.empresa, c.programa, "CS: " ~ c.responsavel_cs if c.responsavel_cs, c.valor_mensal|brl ~ "/mês" if c.valor_mensal]|select|join(" · ") }}
+      {% if c.status != "ativo" %}<span class="selo critico">{{ c.status }}</span>{% endif %}</p>
   </div>
-  <a class="btn sec" href="/clientes/{{ c.id }}/editar">Editar</a>
+  <a class="btn sec" href="/clientes/{{ c.id }}/editar">Editar cadastro</a>
 </div>
 
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px" class="duas">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span class="peq">Saúde do cliente {{ ajuda("0 a 100. Pilar sem dados fica de fora do cálculo.") }}</span>{{ selo_saude(h) }}
+    </div>
+    <div style="font-size:44px;font-weight:700;line-height:1.1;margin:6px 0 14px;font-variant-numeric:tabular-nums">{{ h.score|round|int }}</div>
+    {% for nome, v, dica in [
+        ("Engajamento", h.engajamento, "Quão recente e frequente o cliente fala com vocês"),
+        ("Sentimento", h.sentimento, "Tom das mensagens do cliente, lido pelo Claude"),
+        ("Financeiro", h.financeiro, "Parcelas em dia ou atrasadas no Sponte"),
+        ("Resultado", h.resultado, "Presença, tarefas cumpridas, nota e progresso")] %}
+    <div style="display:grid;grid-template-columns:110px 1fr 40px;gap:10px;align-items:center;margin:8px 0" title="{{ dica }}">
+      <span style="font-size:14px">{{ nome }}</span>
+      <div class="barra" style="height:8px">{% if v is not none %}<span class="{{ cor_barra(v) }}" style="width:{{ v }}%"></span>{% endif %}</div>
+      <span class="num" style="text-align:right;font-weight:600">{{ v|round|int if v is not none else "—" }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <h3>Próximos passos</h3>
+    {% if acoes %}
+    <ol style="margin:0;padding-left:20px">
+      {% for a in acoes %}
+      <li style="margin:6px 0">{{ a.texto }} <span class="selo {{ 'risco' if a.prioridade == 1 else ('atencao' if a.prioridade == 2 else 'neutro') }}">{{ ["hoje", "semana", "depois"][a.prioridade - 1] }}</span></li>
+      {% endfor %}
+    </ol>
+    {% else %}<p class="peq">Nada pendente para este cliente.</p>{% endif %}
+    {% if h.alertas %}
+    <h3 style="margin-top:16px">Alertas</h3>
+    <ul class="alertas" style="color:var(--texto);font-size:14px">
+      {% for a in h.alertas %}<li>{{ a }} <span class="peq">· {{ AREAS[a.area] }}</span></li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+
+<h2>Jornada</h2>
 <div class="grade">
-  {% for nome, v in [("Engajamento", h.engajamento), ("Sentimento", h.sentimento), ("Financeiro", h.financeiro), ("Resultado", h.resultado)] %}
   <div class="card kpi">
-    <div class="rotulo">{{ nome }}</div>
-    <div class="valor">{{ v|round|int if v is not none else "—" }}</div>
-    {% if v is not none %}<div class="barra"><span style="width:{{ v }}%"></span></div>{% else %}<div class="sub" style="font-size:12px;margin:0">sem dados</div>{% endif %}
+    <div class="rotulo">Perfil ideal (fit) {{ ajuda("Lei 1: o cliente certo. Avaliado no cadastro.") }}</div>
+    <div class="valor" style="font-size:20px">
+      {% if c.fit %}<span class="selo {{ {'alto': 'ok', 'medio': 'atencao', 'baixo': 'critico'}[c.fit] }}" style="font-size:14px">{{ c.fit|replace("medio", "médio")|capitalize }}</span>{% else %}<a href="/clientes/{{ c.id }}/editar" style="font-size:14px">Avaliar</a>{% endif %}
+    </div>
+    <div class="nota">{{ "Vendido por " ~ c.vendedor if c.vendedor else "" }}</div>
   </div>
-  {% endfor %}
   <div class="card kpi">
-    <div class="rotulo">Tempo mediano de resposta (90 dias)</div>
-    <div class="valor">{% if atend.tempo_resposta_mediano_min is none %}—{% elif atend.tempo_resposta_mediano_min < 60 %}{{ atend.tempo_resposta_mediano_min|round|int }} min{% else %}{{ (atend.tempo_resposta_mediano_min / 60)|round(1) }} h{% endif %}</div>
+    <div class="rotulo">Tempo de casa</div>
+    <div class="valor" style="font-size:20px">{{ h.dias_desde_inicio ~ " dias" if h.dias_desde_inicio is not none else "—" }}</div>
+    <div class="nota">{{ "desde " ~ c.data_inicio.strftime("%d/%m/%Y") if c.data_inicio else "preencha a data de início" }}</div>
+  </div>
+  <div class="card kpi">
+    <div class="rotulo">Primeiro resultado {{ ajuda("Lei 7: tempo entre o início do contrato e o primeiro resultado registrado") }}</div>
+    <div class="valor" style="font-size:20px">
+      {% if h.dias_ate_primeiro_valor is not none %}{{ h.dias_ate_primeiro_valor }} dias
+      {% elif h.dias_desde_inicio is not none and h.dias_desde_inicio > meta_primeiro_valor %}<span style="color:var(--risco)">Atrasado</span>
+      {% else %}Aguardando{% endif %}
+    </div>
+    <div class="nota">meta: até {{ meta_primeiro_valor }} dias</div>
+  </div>
+  <div class="card kpi">
+    <div class="rotulo">Último contato da equipe {{ ajuda("Lei 2: mensagem enviada pela equipe ou consultoria realizada") }}</div>
+    <div class="valor" style="font-size:20px;{{ 'color:var(--risco)' if h.dias_sem_toque is none or h.dias_sem_toque > meta_toque }}">
+      {{ "hoje" if h.dias_sem_toque == 0 else (("há " ~ h.dias_sem_toque ~ " dias") if h.dias_sem_toque is not none else "nunca") }}</div>
+    <div class="nota">meta: a cada {{ meta_toque }} dias</div>
+  </div>
+  <div class="card kpi">
+    <div class="rotulo">Renovação</div>
+    <div class="valor" style="font-size:20px">{{ c.data_renovacao.strftime("%d/%m/%Y") if c.data_renovacao else "—" }}</div>
+    <div class="nota">{% if c.data_renovacao %}{% set d = (c.data_renovacao - hoje).days %}{{ "em " ~ d ~ " dias" if d >= 0 else "vencida há " ~ (-d) ~ " dias" }}{% endif %}</div>
   </div>
 </div>
 
-{% if h.alertas %}
-<h2>Alertas</h2>
-<div class="card"><ul class="alertas" style="font-size:14px;color:var(--texto)">{% for a in h.alertas %}<li>{{ a }}</li>{% endfor %}</ul></div>
-{% endif %}
+<div class="card" style="margin-top:12px">
+  <div class="peq">Resultado que o cliente espera alcançar {{ ajuda("Lei 3: o objetivo do cliente, nas palavras dele") }}</div>
+  {% if c.resultado_esperado %}<p style="margin:4px 0 0;font-size:16px">“{{ c.resultado_esperado }}”</p>
+  {% else %}<p style="margin:4px 0 0"><a href="/clientes/{{ c.id }}/editar">Registrar o resultado esperado</a> <span class="peq">· sem isso não dá para provar valor</span></p>{% endif %}
+</div>
 
 {% if historico|length > 1 %}
-<h2>Evolução do score</h2>
+<h2>Evolução da saúde</h2>
 <div class="card">
   {% set w = 600 %}{% set hgt = 120 %}{% set n = historico|length %}
   <svg viewBox="0 0 {{ w }} {{ hgt }}" width="100%" height="{{ hgt }}" preserveAspectRatio="none" role="img" aria-label="Evolução do health score">
-    <line x1="0" x2="{{ w }}" y1="{{ hgt - 70 * hgt / 100 }}" y2="{{ hgt - 70 * hgt / 100 }}" stroke="var(--ok)" stroke-dasharray="4 4" stroke-width="1"/>
-    <line x1="0" x2="{{ w }}" y1="{{ hgt - 40 * hgt / 100 }}" y2="{{ hgt - 40 * hgt / 100 }}" stroke="var(--risco)" stroke-dasharray="4 4" stroke-width="1"/>
-    <polyline fill="none" stroke="var(--marca)" stroke-width="2" vector-effect="non-scaling-stroke"
+    <line x1="0" x2="{{ w }}" y1="{{ hgt * 0.3 }}" y2="{{ hgt * 0.3 }}" stroke="var(--ok)" stroke-dasharray="4 4" stroke-width="1" vector-effect="non-scaling-stroke"/>
+    <line x1="0" x2="{{ w }}" y1="{{ hgt * 0.6 }}" y2="{{ hgt * 0.6 }}" stroke="var(--risco)" stroke-dasharray="4 4" stroke-width="1" vector-effect="non-scaling-stroke"/>
+    <polyline fill="none" stroke="var(--marca)" stroke-width="2.5" vector-effect="non-scaling-stroke"
       points="{% for s in historico %}{{ loop.index0 * w / (n - 1) }},{{ hgt - s.score * hgt / 100 }} {% endfor %}"/>
   </svg>
-  <div class="linha sub" style="font-size:12px;margin:0"><span>{{ historico[0].data.strftime("%d/%m") }}</span><span>{{ historico[-1].data.strftime("%d/%m") }}</span></div>
+  <div style="display:flex;justify-content:space-between" class="peq">
+    <span>{{ historico[0].data.strftime("%d/%m") }} · {{ historico[0].score|round|int }}</span>
+    <span>linhas: <span style="color:var(--ok)">70 saudável</span> · <span style="color:var(--risco)">40 risco</span></span>
+    <span>{{ historico[-1].data.strftime("%d/%m") }} · {{ historico[-1].score|round|int }}</span>
+  </div>
 </div>
 {% endif %}
 
-<h2>Registrar consultoria</h2>
-<div class="card">
-<form class="campos" method="post" action="/clientes/{{ c.id }}/consultorias">
-  <label>Data e hora <input type="datetime-local" name="data" required></label>
-  <label>Consultor(a) <input name="consultor"></label>
-  <label>Duração (min) <input type="number" name="duracao_min" min="0"></label>
-  <label>Cliente compareceu? <select name="compareceu"><option value="sim">Sim</option><option value="nao">Não</option></select></label>
-  <label>Tarefas combinadas na anterior <input type="number" name="tarefas_combinadas" value="0" min="0"></label>
-  <label>Tarefas cumpridas <input type="number" name="tarefas_cumpridas" value="0" min="0"></label>
-  <label>Nota do cliente (0–10) <input type="number" name="nota_cliente" min="0" max="10"></label>
-  <label class="inteiro">Notas da consultoria (entram na análise de sentimento) <textarea name="notas"></textarea></label>
-  <div><button class="btn">Salvar consultoria</button></div>
-</form>
-</div>
+<h2>Registrar</h2>
+<details class="acao">
+  <summary>🏆 Resultado do cliente</summary>
+  <div>
+    <p class="peq" style="margin-top:0">Toda vitória do cliente conta: a primeira entrega de valor, uma meta batida, um ganho em reais. Isso alimenta as leis 3, 5 e 7.</p>
+    <form class="campos" method="post" action="/clientes/{{ c.id }}/marcos">
+      <label>Data <input type="date" name="data" value="{{ hoje }}" required></label>
+      <label>Tipo
+        <select name="tipo">{% for k, v in TIPOS_MARCO.items() %}<option value="{{ k }}" {{ "selected" if k == "meta" }}>{{ v }}</option>{% endfor %}</select>
+      </label>
+      <label>Valor gerado (R$, opcional) <input name="valor_gerado" inputmode="decimal" placeholder="Ex.: 12.000,00"></label>
+      <label class="inteiro">O que o cliente conquistou <input name="descricao" required placeholder="Ex.: Implantou o DRE e reduziu 8% dos custos fixos"></label>
+      <div><button class="btn">Salvar resultado</button></div>
+    </form>
+  </div>
+</details>
+<details class="acao">
+  <summary>📅 Consultoria</summary>
+  <div>
+    <form class="campos" method="post" action="/clientes/{{ c.id }}/consultorias">
+      <label>Data e hora <input type="datetime-local" name="data" required></label>
+      <label>Consultor(a) <input name="consultor"></label>
+      <label>Cliente compareceu? <select name="compareceu"><option value="sim">Sim</option><option value="nao">Não</option></select></label>
+      <label>Duração (min) <input type="number" name="duracao_min" min="0"></label>
+      <label>Tarefas combinadas na anterior <input type="number" name="tarefas_combinadas" value="0" min="0"></label>
+      <label>Tarefas cumpridas <input type="number" name="tarefas_cumpridas" value="0" min="0"></label>
+      <label>Nota do cliente (0 a 10) <small>usada no NPS</small><input type="number" name="nota_cliente" min="0" max="10"></label>
+      <label class="inteiro">Anotações <small>entram na análise de sentimento</small><textarea name="notas"></textarea></label>
+      <div><button class="btn">Salvar consultoria</button></div>
+    </form>
+  </div>
+</details>
 
-<h2>Consultorias</h2>
-<div class="rolagem"><table>
-  <tr><th>Data</th><th>Consultor</th><th>Presença</th><th class="num">Tarefas</th><th class="num">Nota</th><th>Notas</th></tr>
+<h2 id="resultados">Resultados conquistados</h2>
+<div class="tabela"><table>
+  <tr><th>Data</th><th>Tipo</th><th>Conquista</th><th class="num">Valor gerado</th></tr>
+  {% for m in marcos %}
+  <tr><td>{{ m.data.strftime("%d/%m/%Y") }}</td><td><span class="selo ok">{{ TIPOS_MARCO[m.tipo] }}</span></td>
+      <td>{{ m.descricao }}</td><td class="num">{{ m.valor_gerado|brl if m.valor_gerado else "—" }}</td></tr>
+  {% else %}<tr><td colspan="4" class="vazio">Nenhum resultado registrado. Use “Registrar → Resultado do cliente” acima.</td></tr>{% endfor %}
+</table></div>
+
+<h2 id="consultorias">Consultorias</h2>
+<div class="tabela"><table>
+  <tr><th>Data</th><th>Consultor</th><th>Presença</th><th class="num">Tarefas</th><th class="num">Nota</th><th>Anotações</th></tr>
   {% for k in consultorias %}
   <tr>
     <td>{{ k.data.strftime("%d/%m/%Y") }}</td><td>{{ k.consultor or "" }}</td>
-    <td>{% if k.compareceu %}<span class="selo saudavel">Presente</span>{% else %}<span class="selo risco">Faltou</span>{% endif %}</td>
+    <td>{% if k.compareceu %}<span class="selo ok">Presente</span>{% else %}<span class="selo critico">Faltou</span>{% endif %}</td>
     <td class="num">{{ k.tarefas_cumpridas }}/{{ k.tarefas_combinadas }}</td>
     <td class="num">{{ k.nota_cliente if k.nota_cliente is not none else "—" }}</td>
-    <td class="msg">{{ (k.notas or "")[:200] }}</td>
+    <td>{{ (k.notas or "")[:200] }}</td>
   </tr>
   {% else %}<tr><td colspan="6" class="vazio">Nenhuma consultoria registrada.</td></tr>{% endfor %}
 </table></div>
 
-<h2>Financeiro (Sponte)</h2>
-<div class="rolagem"><table>
+<h2>Financeiro <span class="peq" style="font-weight:400">· Sponte</span></h2>
+<div class="tabela"><table>
   <tr><th>Vencimento</th><th class="num">Valor</th><th>Situação</th></tr>
   {% for p in parcelas %}
   <tr>
     <td>{{ p.vencimento.strftime("%d/%m/%Y") }}</td><td class="num">{{ p.valor|brl }}</td>
-    <td>{% if p.pago %}<span class="selo saudavel">Paga {{ p.data_pagamento.strftime("%d/%m") if p.data_pagamento else "" }}</span>
-        {% elif p.vencimento < hoje %}<span class="selo risco">Vencida há {{ (hoje - p.vencimento).days }} dias</span>
+    <td>{% if p.pago %}<span class="selo ok">Paga {{ p.data_pagamento.strftime("%d/%m") if p.data_pagamento else "" }}</span>
+        {% elif p.vencimento < hoje %}<span class="selo critico">Vencida há {{ (hoje - p.vencimento).days }} dias</span>
         {% else %}<span class="selo atencao">A vencer</span>{% endif %}</td>
   </tr>
-  {% else %}<tr><td colspan="3" class="vazio">Sem parcelas. Preencha o código Sponte do cliente e sincronize.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="3" class="vazio">Sem parcelas. Preencha o código Sponte no cadastro e sincronize.</td></tr>{% endfor %}
 </table></div>
 
-<h2>Linha do tempo</h2>
-<div class="rolagem"><table>
-  <tr><th>Quando</th><th>Canal</th><th>Quem</th><th>Mensagem</th><th>Análise</th></tr>
+<h2>Conversas <span class="peq" style="font-weight:400">· tempo mediano de resposta em 90 dias: {{ tempo(atend.tempo_resposta_mediano_min) }}</span></h2>
+<div class="tabela"><table>
+  <tr><th>Quando</th><th>Canal</th><th>Quem</th><th>Mensagem</th><th>Leitura do Claude</th></tr>
   {% for i in interacoes %}
   <tr>
     <td style="white-space:nowrap">{{ i.ocorrido_em.strftime("%d/%m %H:%M") }}</td>
     <td>{{ i.canal }}</td>
     <td>{{ "Equipe" if i.direcao == "saida" else (i.autor or "Cliente") }}</td>
-    <td class="msg">{{ i.texto[:300] }}</td>
+    <td>{{ i.texto[:300] }}</td>
     <td style="white-space:nowrap">
       {% if i.sentimento is not none %}
-        <span class="selo {{ 'saudavel' if i.sentimento > 0.2 else ('risco' if i.sentimento < -0.2 else 'atencao') }}">{{ "%+.1f"|format(i.sentimento) }}</span>
-        <span class="meta">{{ i.categoria }}</span>{% if i.sinal_risco %} <span class="selo risco">churn</span>{% endif %}
+        <span class="selo {{ 'ok' if i.sentimento > 0.2 else ('critico' if i.sentimento < -0.2 else 'neutro') }}">{{ "positivo" if i.sentimento > 0.2 else ("negativo" if i.sentimento < -0.2 else "neutro") }}</span>
+        {% if i.sinal_risco %}<span class="selo critico">risco de churn</span>{% endif %}
+        {% if i.categoria and i.categoria != "outro" %}<div class="peq">{{ i.categoria }}</div>{% endif %}
       {% endif %}
     </td>
   </tr>
-  {% else %}<tr><td colspan="5" class="vazio">Nenhuma interação ainda.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="5" class="vazio">Nenhuma conversa ainda.</td></tr>{% endfor %}
 </table></div>
+<style>@media (max-width: 760px) { .duas { grid-template-columns: 1fr !important; } }</style>
 {% endblock %}
